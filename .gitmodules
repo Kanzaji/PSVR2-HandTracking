@@ -1,0 +1,8 @@
+[submodule "monado"]
+	path = monado
+	url = https://gitlab.freedesktop.org/slitcch/monado.git
+	branch = mt/ht-fixes-feb
+	
+[submodule "escapi"]
+	path = attic/escapi
+	url = https://github.com/moshimeow/escapi_with_timestamps.git
