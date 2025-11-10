@@ -22,7 +22,8 @@ struct CameraConfig {
 void setup_shared_memory(SharedMemoryData& data) {
     try {
         data.hMapFile = OpenFileMappingA(FILE_MAP_READ, FALSE, FILE_MAPPING_NAME);
-        if (!data.hMapFile) throw std::runtime_error("Could not open file mapping object. Is your PSVR2 and SteamVR on?");
+        if (!data.hMapFile) throw std::runtime_error(
+            "Could not open file mapping object. Is your PSVR2 and SteamVR on?");
 
         data.pBuf = MapViewOfFile(data.hMapFile, FILE_MAP_READ, 0, 0, SHARED_MEM_SIZE);
         if (!data.pBuf) throw std::runtime_error("Could not map view of file.");
@@ -48,8 +49,8 @@ void cleanup_shared_memory(SharedMemoryData& data) {
     if (data.hMapFile) CloseHandle(data.hMapFile);
 }
 
-bool get_distortion_config(SharedMemoryData& data, int cameraId, CameraParameters& params, CameraIntrinsics& intrinsics)
-{
+bool get_distortion_config(SharedMemoryData& data, int cameraId, CameraParameters& params,
+                           CameraIntrinsics& intrinsics) {
     // We should open, lock, get data, then unlock the SHARE_VRT2_WIN_CALIB_MTX mutex
     HANDLE hCalibMutex = OpenMutexA(SYNCHRONIZE, FALSE, "SHARE_VRT2_WIN_CALIB_MTX");
     if (!hCalibMutex) {
@@ -66,7 +67,7 @@ bool get_distortion_config(SharedMemoryData& data, int cameraId, CameraParameter
     // The camera config data is an array of CameraConfig structs
     // The base address for this array is data.imageMemBase + 0x524
     // Each CameraConfig struct is 0x70 bytes long
-    const CameraConfig* configs = reinterpret_cast<const CameraConfig*>(static_cast<char*>(data.pBuf) + 0x524);
+    const auto configs = reinterpret_cast<const CameraConfig*>(static_cast<char*>(data.pBuf) + 0x524);
 
     bool found = false;
     for (int i = 0; i < 4; ++i) {
@@ -81,7 +82,7 @@ bool get_distortion_config(SharedMemoryData& data, int cameraId, CameraParameter
             // fx  0   cx
             // 0   fy  cy
             // 0   0   1
-            
+
             intrinsics.fx = configs[i].pxMat[0];
             intrinsics.fy = configs[i].pxMat[4];
             intrinsics.cx = configs[i].pxMat[2];
@@ -97,7 +98,7 @@ bool get_distortion_config(SharedMemoryData& data, int cameraId, CameraParameter
         CloseHandle(hCalibMutex);
         return false;
     }
-    
+
     if (!ReleaseMutex(hCalibMutex)) {
         std::cerr << "Failed to release calibration mutex." << std::endl;
         CloseHandle(hCalibMutex);
@@ -108,7 +109,8 @@ bool get_distortion_config(SharedMemoryData& data, int cameraId, CameraParameter
     return true;
 }
 
-bool copy_latest_image_buffer(SharedMemoryData& data, void* leftCameraData, void* rightCameraData, size_t cameraDataSize) {
+bool copy_latest_image_buffer(SharedMemoryData& data, void* leftCameraData, void* rightCameraData,
+                              size_t cameraDataSize) {
     if (WaitForSingleObject(data.hImageEvent, INFINITE) != WAIT_OBJECT_0) return false;
     if (WaitForSingleObject(data.hImageMutex, INFINITE) != WAIT_OBJECT_0) return false;
 
@@ -116,19 +118,47 @@ bool copy_latest_image_buffer(SharedMemoryData& data, void* leftCameraData, void
     uint32_t latestIndex = 0;
 
     // Get the most recent camera frame based on which entry is the latest by timestamp.
-    if (*(int *)(data.imageMemBase + 0x3c10) - 1U < 2) { latestTimestamp = *(uint32_t *)(data.imageMemBase + 0x3c18); latestIndex = 0; }
-    if ((*(int *)(data.imageMemBase + 0x4488) - 1U < 2) && (latestTimestamp <= *(uint32_t *)(data.imageMemBase + 0x4490))) { latestIndex = 1; latestTimestamp = *(uint32_t *)(data.imageMemBase + 0x4490); }
-    if ((*(int *)(data.imageMemBase + 0x4d00) - 1U < 2) && (latestTimestamp <= *(uint32_t *)(data.imageMemBase + 0x4d08))) { latestIndex = 2; latestTimestamp = *(uint32_t *)(data.imageMemBase + 0x4d08); }
-    if ((*(int *)(data.imageMemBase + 0x5578) - 1U < 2) && (latestTimestamp <= *(uint32_t *)(data.imageMemBase + 0x5580))) { latestIndex = 3; latestTimestamp = *(uint32_t *)(data.imageMemBase + 0x5580); }
-    if ((*(int *)(data.imageMemBase + 0x5df0) - 1U < 2) && (latestTimestamp <= *(uint32_t *)(data.imageMemBase + 0x5df8))) { latestIndex = 4; latestTimestamp = *(uint32_t *)(data.imageMemBase + 0x5df8); }
-    if ((*(int *)(data.imageMemBase + 0x6668) - 1U < 2) && (latestTimestamp <= *(uint32_t *)(data.imageMemBase + 0x6670))) { latestIndex = 5; latestTimestamp = *(uint32_t *)(data.imageMemBase + 0x6670); }
-    if ((*(int *)(data.imageMemBase + 0x6ee0) - 1U < 2) && (latestTimestamp <= *(uint32_t *)(data.imageMemBase + 0x6ee8))) { latestIndex = 6; latestTimestamp = *(uint32_t *)(data.imageMemBase + 0x6ee8); }
-    if ((*(int *)(data.imageMemBase + 0x7758) - 1U < 2) && (latestTimestamp <= *(uint32_t *)(data.imageMemBase + 0x7760))) { latestIndex = 7; }
+    if (*(int*)(data.imageMemBase + 0x3c10) - 1U < 2) {
+        latestTimestamp = *(uint32_t*)(data.imageMemBase + 0x3c18);
+        latestIndex = 0;
+    }
+    if ((*(int*)(data.imageMemBase + 0x4488) - 1U < 2) && (latestTimestamp <= *(uint32_t*)(data.imageMemBase +
+        0x4490))) {
+        latestIndex = 1;
+        latestTimestamp = *(uint32_t*)(data.imageMemBase + 0x4490);
+    }
+    if ((*(int*)(data.imageMemBase + 0x4d00) - 1U < 2) && (latestTimestamp <= *(uint32_t*)(data.imageMemBase +
+        0x4d08))) {
+        latestIndex = 2;
+        latestTimestamp = *(uint32_t*)(data.imageMemBase + 0x4d08);
+    }
+    if ((*(int*)(data.imageMemBase + 0x5578) - 1U < 2) && (latestTimestamp <= *(uint32_t*)(data.imageMemBase +
+        0x5580))) {
+        latestIndex = 3;
+        latestTimestamp = *(uint32_t*)(data.imageMemBase + 0x5580);
+    }
+    if ((*(int*)(data.imageMemBase + 0x5df0) - 1U < 2) && (latestTimestamp <= *(uint32_t*)(data.imageMemBase +
+        0x5df8))) {
+        latestIndex = 4;
+        latestTimestamp = *(uint32_t*)(data.imageMemBase + 0x5df8);
+    }
+    if ((*(int*)(data.imageMemBase + 0x6668) - 1U < 2) && (latestTimestamp <= *(uint32_t*)(data.imageMemBase +
+        0x6670))) {
+        latestIndex = 5;
+        latestTimestamp = *(uint32_t*)(data.imageMemBase + 0x6670);
+    }
+    if ((*(int*)(data.imageMemBase + 0x6ee0) - 1U < 2) && (latestTimestamp <= *(uint32_t*)(data.imageMemBase +
+        0x6ee8))) {
+        latestIndex = 6;
+        latestTimestamp = *(uint32_t*)(data.imageMemBase + 0x6ee8);
+    }
+    if ((*(int*)(data.imageMemBase + 0x7758) - 1U < 2) && (latestTimestamp <= *(uint32_t*)(data.imageMemBase +
+        0x7760))) { latestIndex = 7; }
 
     const char* data_ptr = data.imageMemBase + IMAGE_BUFFER_OFFSET + (PER_CAMERA_BUFFER_STRIDE * latestIndex);
     memcpy(leftCameraData, data_ptr, cameraDataSize);
     memcpy(rightCameraData, data_ptr + cameraDataSize, cameraDataSize);
-    
+
     if (!ReleaseMutex(data.hImageMutex)) return false;
 
     return true;

@@ -554,6 +554,9 @@ int main(int argc, char** argv) {
             continue;
         }
 
+        //TODO: BC4-Decode on the GPU. We need to undistort as well, and it just takes too long.
+        // When hand is visibile framerate drops to 30 fps (~30ms/frame), this is bad.
+
         // BC4 Decompression (It's on the CPU, it's not great, it's fast enough!)
         // If I end up needing to undistort it as well, I will move this to the GPU.
         for (int i = 0; i < 2; i++) {
@@ -642,6 +645,8 @@ int main(int argc, char** argv) {
             xrt_frame_reference(&frame, nullptr);
         }
 
+        //TODO: Rework IPC system. Probably use shared memory like PSVR2 Driver does, would make more sense than this.
+
         // tracking_message message = {};
         //
         // message.size = TMSIZE;
@@ -669,8 +674,8 @@ int main(int argc, char** argv) {
     vr::VR_Shutdown();
 
     // Close the socket and cleanup Winsock
-    closesocket(state.connectSocket);
-    WSACleanup();
+    // closesocket(state.connectSocket);
+    // WSACleanup();
     oxr_sdl2_hack_stop(&sdl2_hack);
 
     return 0;
