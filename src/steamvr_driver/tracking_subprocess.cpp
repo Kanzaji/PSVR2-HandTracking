@@ -15,7 +15,6 @@
 #include "hg_interface.h"
 
 #include "os/os_time.h"
-#include "../../src/steamvr_driver/oxr_sdl2_hack.h"
 #include "tracking_subprocess_protocol.hpp"
 #include "openvr.h"
 #include "u_subprocess_logging.h"
@@ -23,11 +22,11 @@
 #include "pinch_decider.hpp"
 #include "math/m_filter_one_euro.h"
 #include "everything_else_decider.hpp"
-#include "../../attic/cs_test/shared_memory.h"
+#include "shared_memory.h"
 #include "util/u_frame.h"
 #include "../../monado/src/external/bcdec/bcdec.h"
+#include "oxr_sdl2_hack.h"
 
-// Why even???
 #define FCMIN 10.0
 #define FCMIN_D 9.0
 #define OUR_BETA 3.0
@@ -74,8 +73,7 @@ struct subprocess_state {
 
 bool psvr2_get_cam_calib(t_stereo_camera_calibration **calibRef, xrt_pose *head_in_left, subprocess_state *state) {
 	t_stereo_camera_calibration *calib = nullptr;
-    //TODO: Figure out if it's possible to use this, or do we need to do our own undistortion.
-    //Not really a big problem if we need, we already have the code.
+    //TODO: Do our own undistortion.
     t_stereo_camera_calibration_alloc(&calib, T_DISTORTION_FISHEYE_KB4);
 
     for (int i = 0; i < 2; i++) {
@@ -144,10 +142,6 @@ bool setup_camera_and_ht(subprocess_state& state) {
 
     math_pose_invert(&head_in_left, &state.left_camera_in_head);
 
-    // This definitely needs to be first
-    void* sdl2_hack;
-    oxr_sdl2_hack_create(&sdl2_hack);
-
     // zero-initialized out of paranoia
     t_hand_tracking_create_info create_info = {};
     t_camera_extra_info& info = create_info.cams_info;
@@ -173,9 +167,6 @@ bool setup_camera_and_ht(subprocess_state& state) {
     strcat_s(rpath, R"(\resources\internal\hand-tracking-models\)");
     state.sync =
         t_hand_tracking_sync_mercury_create(calib, create_info, rpath);
-
-    // What even is this?
-    oxr_sdl2_hack_start(sdl2_hack, nullptr, nullptr);
 
     // // Suggestions. These are suitable for head tracking.
     for (int i = 0; i < 2; i++) {
@@ -402,7 +393,7 @@ int main(int argc, char** argv) {
         return 3;
     }
 
-    // rootpath = argv[1];
+    rootpath = argv[1];
     // state.port = argv[2];
 
     if (argc >= 4) u_sp_log_set_file_path(argv[3]);
@@ -426,53 +417,57 @@ int main(int argc, char** argv) {
         return 4;
     }
 
-    U_SP_LOG_I("Connecting to local host with port: %s", state.port);
+    // U_SP_LOG_I("Connecting to local host with port: %s", state.port);
+    //
+    // // Initialize WinSock!
+    // // This is an "out" struct, which we won't bother with looking at.
+    // WSADATA wsaData;
+    //
+    // U_SP_LOG_I("WSAStartup...");
+    // // It's also supposedly fine to have multiple overlapping calls to WSAStartup and WSACleanup. Wow Windows commits some *crimes* but alrighty
+    // int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+    // if (iResult != 0) {
+    //     U_SP_LOG_E("WSAStartup failed: ", iResult);
+    //     return 5;
+    // }
+    //
+    // U_SP_LOG_I("Setting up Socket...");
+    //
+    // // Create a socket to connect to the parent process
+    // state.connectSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    // if (state.connectSocket == INVALID_SOCKET) {
+    //     U_SP_LOG_E("Error creating socket: ", WSAGetLastError());
+    //     WSACleanup();
+    //     return 6;
+    // }
+    //
+    // U_SP_LOG_I("Connecting to the server...");
+    //
+    // // Connect to the parent process
+    // sockaddr_in serverAddr{};
+    // serverAddr.sin_family = AF_INET;
+    // serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    //
+    // serverAddr.sin_port = htons(atoi(state.port));
+    // iResult = connect(state.connectSocket, reinterpret_cast<SOCKADDR*>(&serverAddr), sizeof(serverAddr));
+    // if (iResult == SOCKET_ERROR) {
+    //     U_SP_LOG_E("Error connecting to server: ", WSAGetLastError());
+    //     closesocket(state.connectSocket);
+    //     WSACleanup();
+    //     return 7;
+    // }
 
-    // Initialize WinSock!
-    // This is an "out" struct, which we won't bother with looking at.
-    WSADATA wsaData;
-
-    U_SP_LOG_I("WSAStartup...");
-    // It's also supposedly fine to have multiple overlapping calls to WSAStartup and WSACleanup. Wow Windows commits some *crimes* but alrighty
-    int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
-    if (iResult != 0) {
-        U_SP_LOG_E("WSAStartup failed: ", iResult);
-        return 5;
-    }
-
-    U_SP_LOG_I("Setting up Socket...");
-
-    // Create a socket to connect to the parent process
-    state.connectSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (state.connectSocket == INVALID_SOCKET) {
-        U_SP_LOG_E("Error creating socket: ", WSAGetLastError());
-        WSACleanup();
-        return 6;
-    }
-
-    U_SP_LOG_I("Connecting to the server...");
-
-    // Connect to the parent process
-    sockaddr_in serverAddr{};
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
-
-    serverAddr.sin_port = htons(atoi(state.port));
-    iResult = connect(state.connectSocket, reinterpret_cast<SOCKADDR*>(&serverAddr), sizeof(serverAddr));
-    if (iResult == SOCKET_ERROR) {
-        U_SP_LOG_E("Error connecting to server: ", WSAGetLastError());
-        closesocket(state.connectSocket);
-        WSACleanup();
-        return 7;
-    }
+    U_SP_LOG_I("Setting up debug [Part 1]");
+    void* sdl2_hack;
+    oxr_sdl2_hack_create(&sdl2_hack);
 
     U_SP_LOG_I("Geting camera calibration...");
 
     // We setup the cam cal for PSVR2.
     setup_camera_and_ht(state);
 
-    //TODO: Fix those, they apparently just get ignored by current SteamVR. Also fix the Bindings files!
-    U_SP_LOG_I("Adding SteamVR variables...");
+    U_SP_LOG_I("Setting up debug [Part 2]");
+    oxr_sdl2_hack_start(sdl2_hack, nullptr, nullptr);
 
     u_var_add_root(&state, "SteamVR driver!", 0);
 
@@ -530,6 +525,7 @@ int main(int argc, char** argv) {
     u_var_add_f32(&state, &state.bs[1].curls[2], "right.curls[2]");
     u_var_add_f32(&state, &state.bs[1].curls[3], "right.curls[3]");
     u_var_add_f32(&state, &state.bs[1].curls[4], "right.curls[4]");
+
     const int IMAGE_WIDTH = 1016;
     const int IMAGE_HEIGHT = 1024;
     const int REQUIRED_WIDTH = 1024;
@@ -642,28 +638,28 @@ int main(int argc, char** argv) {
         t_ht_sync_process(state.sync, frames[0], frames[1], &hands[0], &hands[1], &out_timestamp);
 
         for (auto & frame : frames) {
-            // Discard frame references that were consumed by Mercury.
+            // Discard frame references that Mercury consumed.
             xrt_frame_reference(&frame, nullptr);
         }
 
-        tracking_message message = {};
-
-        message.size = TMSIZE;
-        message.camera_timestamp = static_cast<int64_t>(time_camera);
-        message.host_recieved_frame_timestamp = static_cast<int64_t>(time_now_uint);
-
-        hjs2_to_tracking_message(state, hands, attached_hmd_pose, message, static_cast<int64_t>(time_camera));
-
-        // Send data to the parent process
-        message.sent_at_timestamp = os_monotonic_get_ns();
-
-        iResult = send(state.connectSocket, reinterpret_cast<const char*>(&message), TMSIZE, 0);
-
-        if (iResult == SOCKET_ERROR) {
-            // WSAECONNABORTED = 10053 winerror.h
-            U_SP_LOG_E("Error sending data: %d", WSAGetLastError());
-            break;
-        }
+        // tracking_message message = {};
+        //
+        // message.size = TMSIZE;
+        // message.camera_timestamp = static_cast<int64_t>(time_camera);
+        // message.host_recieved_frame_timestamp = static_cast<int64_t>(time_now_uint);
+        //
+        // hjs2_to_tracking_message(state, hands, attached_hmd_pose, message, static_cast<int64_t>(time_camera));
+        //
+        // // Send data to the parent process
+        // message.sent_at_timestamp = os_monotonic_get_ns();
+        //
+        // iResult = send(state.connectSocket, reinterpret_cast<const char*>(&message), TMSIZE, 0);
+        //
+        // if (iResult == SOCKET_ERROR) {
+        //     // WSAECONNABORTED = 10053 winerror.h
+        //     U_SP_LOG_E("Error sending data: %d", WSAGetLastError());
+        //     break;
+        // }
     }
 
     U_SP_LOG_I("Shutting down cleanly!");
@@ -675,6 +671,7 @@ int main(int argc, char** argv) {
     // Close the socket and cleanup Winsock
     closesocket(state.connectSocket);
     WSACleanup();
+    oxr_sdl2_hack_stop(&sdl2_hack);
 
     return 0;
 }

@@ -25,7 +25,8 @@ endif()
 # Default to PIC code
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-set(MONADO_SRC_XRT ${CMAKE_CURRENT_SOURCE_DIR}/monado/src/xrt)
+set(MONADO_SRC_XRT "${CMAKE_CURRENT_SOURCE_DIR}/monado/src/xrt")
+set(MONADO_SRC_EXTERNAL "${CMAKE_CURRENT_SOURCE_DIR}/monado/src/external")
 
 ### Set configuration options for Monado
 set(XRT_HAVE_JPEG OFF) # No we don't
@@ -88,10 +89,11 @@ set(BUILD_TESTING OFF)
 set(BUILD_DOC OFF)
 
 # Debug GUI Stuff
-set(XRT_FEATURE_WINDOW_PEEK OFF)
-set(XRT_MODULE_MONADO_GUI OFF)
-set(XRT_DEBUG_GUI OFF)
-set(XRT_FEATURE_CLIENT_DEBUG_GUI OFF)
+set(XRT_FEATURE_WINDOW_PEEK ON)
+set(XRT_MODULE_MONADO_GUI ON)
+set(XRT_DEBUG_GUI ON)
+set(XRT_FEATURE_CLIENT_DEBUG_GUI ON)
+set(FEATURE_OPENXR_DEBUG_UTILS ON)
 
 # Make sure we have pretty colours
 option (FORCE_COLORED_OUTPUT "Always produce ANSI-colored output (GNU/Clang only)." TRUE)
@@ -119,7 +121,7 @@ option (FORCE_COLORED_OUTPUT "Always produce ANSI-colored output (GNU/Clang only
 set(OpenCV_DIR "${CMAKE_SOURCE_DIR}/deps/OpenCV/build")
 set(ONNXRuntime_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}\\deps\\ONNXRuntime\\runtimes\\win-x64\\native\\onnxruntime.lib")
 set(ONNXRuntime_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}\\deps\\ONNXRuntime\\build\\native\\include")
-#set(SDL2_DIR "${CMAKE_CURRENT_SOURCE_DIR}\\deps\\SDL2-2.32.10\\cmake")
+set(SDL2_DIR "${CMAKE_CURRENT_SOURCE_DIR}\\deps\\SDL2-2.32.10\\cmake")
 
 list(APPEND CMAKE_MODULE_PATH
 	"${CMAKE_SOURCE_DIR}/cmake"
