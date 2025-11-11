@@ -4,9 +4,12 @@ add_library(tracking_subprocess_protocol INTERFACE
 )
 
 add_executable(tracking_subprocess
-        tracking_subprocess.cpp
+        tracking_subprocess.cpp tracking_subprocess.h
         util/get_finger_curls.hpp util/get_finger_curls.cpp
         util/everything_else_decider.hpp util/everything_else_decider.cpp
+        ipc.cpp ipc.h
+        debug/debug.cpp
+        debug/debug.h
 )
 
 target_link_libraries(tracking_subprocess PRIVATE
@@ -29,7 +32,7 @@ target_link_libraries(tracking_subprocess PRIVATE
 set_target_properties(tracking_subprocess PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/mercury/bin/win64")
 
 # Debug Hack
-add_library(oxr_sdl2_debug_hack STATIC oxr_sdl2_hack.c)
+add_library(oxr_sdl2_debug_hack STATIC debug/oxr_sdl2_hack.c)
 target_link_libraries(oxr_sdl2_debug_hack PRIVATE aux_util)
 
 if(XRT_HAVE_OPENGL)

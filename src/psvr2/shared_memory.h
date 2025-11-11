@@ -5,10 +5,10 @@
 #include <windows.h>
 
 struct SharedMemoryData {
-    HANDLE hMapFile = NULL;
-    LPVOID pBuf = NULL;
-    HANDLE hImageEvent = NULL;
-    HANDLE hImageMutex = NULL;
+    HANDLE hMapFile = nullptr;
+    LPVOID pBuf = nullptr;
+    HANDLE hImageEvent = nullptr;
+    HANDLE hImageMutex = nullptr;
     char* imageMemBase = nullptr;
 };
 

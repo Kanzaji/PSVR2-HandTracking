@@ -3,7 +3,6 @@
 #include <d3d11.h>
 #include <DirectXMath.h>
 #include <vector>
-#include <array>
 
 struct UndistortVertex {
     DirectX::XMFLOAT3 Pos; // Position in NDC [-1, 1]

@@ -7,13 +7,12 @@
 // which take up space, and we're sending these messages at 54Hz.
 #pragma pack(push, 1)
 
-struct emulated_buttons_state
-{
+struct emulated_buttons_state {
     bool a;
     bool b;
     bool trigger;
     bool grip; // Not emulated, but you can get at it through the UI
-    
+
     bool system; // ditto
 
 
@@ -29,8 +28,7 @@ struct emulated_buttons_state
     float curls[5];
 };
 
-struct tracking_message_hand
-{
+struct tracking_message_hand {
     bool tracked;
     uint8_t _pad[3];
     struct emulated_buttons_state bs;
@@ -39,8 +37,7 @@ struct tracking_message_hand
     xrt_pose fingers_relative[26];
 };
 
-struct tracking_message
-{
+struct tracking_message {
     uint32_t size;
     int64_t camera_timestamp;
     int64_t host_recieved_frame_timestamp;
