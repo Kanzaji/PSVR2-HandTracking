@@ -3,7 +3,6 @@
 #include "distortion.h"
 
 #include <windows.h>
-#include <stdexcept>
 
 struct SharedMemoryData {
     HANDLE hMapFile = NULL;

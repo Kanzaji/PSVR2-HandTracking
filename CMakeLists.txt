@@ -6,7 +6,6 @@
 # which is based on the Monado project that contains the Mercury AI for Hand Tracking.
 # This is already a mess...
 
-
 cmake_minimum_required(VERSION 3.10.2)
 project(PSVR2HandTracking VERSION 1.0.0)
 

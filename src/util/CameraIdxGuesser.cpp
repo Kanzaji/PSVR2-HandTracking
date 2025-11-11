@@ -6,6 +6,8 @@
  * @author Moses Turner <moses@collabora.com>
  */
 
+// Required for compilation, not used by us so \o/
+
 // This block...
 #include <mfapi.h>
 #include <mfidl.h>

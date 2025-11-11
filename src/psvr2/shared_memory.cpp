@@ -1,6 +1,8 @@
 #include "shared_memory.h"
 #include <iostream>
 
+// Modified from PSVR2-Camera project. Credits: Supremium
+
 const char* FILE_MAPPING_NAME = "SHARE_VRT2_WIN";
 const DWORD SHARED_MEM_SIZE = 0x2000000; // 32MB
 const char* EVENT_NAME = "SHARE_VRT2_WIN_IMAGE_EVT";

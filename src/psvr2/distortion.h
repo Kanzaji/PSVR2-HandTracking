@@ -30,5 +30,3 @@ void create_undistortion_mesh(
     DWORD meshDensityX = 256,
     DWORD meshDensityY = 256
 );
-
-void create_default_mesh(std::vector<UndistortVertex>& out_vertices, std::vector<DWORD>& out_indices);

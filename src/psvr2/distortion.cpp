@@ -2,7 +2,9 @@
 
 using namespace DirectX;
 
-DirectX::XMFLOAT2 get_distorted_point(double x, double y, const CameraParameters& params) {
+// Modified from PSVR2-Camera project. Credits: Supremium
+
+XMFLOAT2 get_distorted_point(double x, double y, const CameraParameters& params) {
     const auto& p = params.coeffs;
 
     double xSq = x * x;
@@ -48,7 +50,7 @@ DirectX::XMFLOAT2 get_distorted_point(double x, double y, const CameraParameters
         return { -10.0f, -10.0f };
     }
 
-    XMFLOAT2 final_p;
+    XMFLOAT2 final_p{};
     final_p.x = XMVectorGetX(pOut) / w;
     final_p.y = XMVectorGetY(pOut) / w;
     
@@ -111,21 +113,4 @@ void create_undistortion_mesh(
             outIndices.push_back(bottomRight);
         }
     }
-}
-
-void create_default_mesh(std::vector<UndistortVertex>& outVertices, std::vector<DWORD>& outIndices) {
-    outVertices.clear();
-    outIndices.clear();
-
-    outVertices.push_back({ {-1.0f, 1.0f, 0.0f}, {0.0f, 0.0f} });
-    outVertices.push_back({ {1.0f, 1.0f, 0.0f}, {1.0f, 0.0f} });
-    outVertices.push_back({ {-1.0f, -1.0f, 0.0f}, {0.0f, 1.0f} });
-    outVertices.push_back({ {1.0f, -1.0f, 0.0f}, {1.0f, 1.0f} });
-
-    outIndices.push_back(0);
-    outIndices.push_back(1);
-    outIndices.push_back(2);
-    outIndices.push_back(2);
-    outIndices.push_back(1);
-    outIndices.push_back(3);
 }

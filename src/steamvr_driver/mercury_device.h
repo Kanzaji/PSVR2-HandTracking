@@ -4,11 +4,9 @@
 #include <string>
 
 #include "openvr_driver.h"
-#include "tracking/t_hand_tracking.h"
 #include "xrt/xrt_defines.h"
-#include "math/m_space.h"
 #include "util/bones.h"
-#include "tracking_subprocess_protocol.hpp"
+#include "../mercury_subprocess/tracking_subprocess_protocol.hpp"
 
 // From OpenGloves
 // enum KnuckleDeviceComponentIndex

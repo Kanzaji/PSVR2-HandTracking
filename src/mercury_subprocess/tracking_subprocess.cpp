@@ -1,30 +1,33 @@
-#include <iostream>
-#include <string>
 #include <winsock2.h>
 #include <windows.h>
 
 #pragma comment(lib, "ws2_32.lib")
 
-#include <opencv2/opencv.hpp>
-#include <fstream>
-
-#include "distortion.h"
+// Monado
 #include "tracking/t_hand_tracking.h"
 #include "tracking/t_frame_cv_mat_wrapper.hpp"
-#include "math/m_space.h"
-#include "hg_interface.h"
-
-#include "os/os_time.h"
-#include "tracking_subprocess_protocol.hpp"
-#include "openvr.h"
-#include "u_subprocess_logging.h"
-
-#include "pinch_decider.hpp"
 #include "math/m_filter_one_euro.h"
-#include "everything_else_decider.hpp"
-#include "shared_memory.h"
+#include "math/m_space.h"
 #include "util/u_frame.h"
-#include "../../monado/src/external/bcdec/bcdec.h"
+#include "os/os_time.h"
+#include "hg_interface.h"
+#include "bcdec.h"
+
+// OpenVR
+#include "openvr.h"
+
+// OpenCV
+#include <opencv2/opencv.hpp>
+
+// PSVR2
+#include "../psvr2/shared_memory.h"
+#include "../psvr2/distortion.h"
+
+// Current
+#include "util/everything_else_decider.hpp"
+#include "util/pinch_decider.hpp"
+#include "tracking_subprocess_protocol.hpp"
+#include "u_subprocess_logging.h"
 #include "oxr_sdl2_hack.h"
 
 #define FCMIN 10.0
@@ -264,25 +267,25 @@ void hjs2_to_tracking_message(subprocess_state& state, xrt_hand_joint_set sets[2
             hello.y = state.grip_orientation[hand_idx].y * (3.14 / 180);
             hello.z = state.grip_orientation[hand_idx].z * (3.14 / 180);
 
-            xrt_pose meow = {};
-            meow.position.x = grip_position.x;
-            meow.position.y = grip_position.y;
-            meow.position.z = grip_position.z;
+            xrt_pose pose = {};
+            pose.position.x = grip_position.x;
+            pose.position.y = grip_position.y;
+            pose.position.z = grip_position.z;
 
-            math_quat_from_euler_angles(&hello, &meow.orientation);
+            math_quat_from_euler_angles(&hello, &pose.orientation);
 
             struct xrt_relation_chain xrc = {};
             xrt_space_relation tmp = {};
 
-            xrt_pose meow2 = {};
-            meow2.orientation = XRT_QUAT_IDENTITY;
-            meow2.position.x = grip_position.x;
-            meow2.position.y = grip_position.y;
-            meow2.position.z = grip_position.z;
+            xrt_pose pose2 = {};
+            pose2.orientation = XRT_QUAT_IDENTITY;
+            pose2.position.x = grip_position.x;
+            pose2.position.y = grip_position.y;
+            pose2.position.z = grip_position.z;
 
-            m_relation_chain_push_pose(&xrc, &meow2);
+            m_relation_chain_push_pose(&xrc, &pose2);
 
-            m_relation_chain_push_pose(&xrc, &meow);
+            m_relation_chain_push_pose(&xrc, &pose);
 
             m_relation_chain_push_pose(&xrc, &wrist_global[hand_idx]);
             m_relation_chain_resolve(&xrc, &tmp);
@@ -291,11 +294,11 @@ void hjs2_to_tracking_message(subprocess_state& state, xrt_hand_joint_set sets[2
             xrt_pose ap_ = aim_pose(hand_idx, wrist_global[hand_idx], index_pxm_global[hand_idx],
                                     tracked[!hand_idx] ? &wrist_global[!hand_idx] : NULL, attached_head);
 
-            xrt_vec3 meow = m_vec3_mul_scalar(state.aim_orientation[hand_idx], 3.14f / 180.0f);
+            xrt_vec3 vec3 = m_vec3_mul_scalar(state.aim_orientation[hand_idx], 3.14f / 180.0f);
 
             xrt_quat add;
 
-            math_quat_from_euler_angles(&meow, &add);
+            math_quat_from_euler_angles(&vec3, &add);
 
             math_quat_rotate(&ap_.orientation, &add, &ap_.orientation);
 
@@ -370,6 +373,69 @@ bool check_vrserver_alive(subprocess_state& state) {
     return true;
 }
 
+void setup_debug(subprocess_state &state, void* &sdl2_hack) {
+    U_SP_LOG_I("Setting up debug...");
+    oxr_sdl2_hack_create(&sdl2_hack);
+    oxr_sdl2_hack_start(sdl2_hack, nullptr, nullptr);
+
+    u_var_add_root(&state, "SteamVR driver!", 0);
+
+    u_var_add_bool(&state, &state.running, "Running");
+
+    u_var_add_bool(&state, &state.bs[0].a, "left.a");
+    u_var_add_bool(&state, &state.bs[0].b, "left.b");
+    u_var_add_bool(&state, &state.bs[0].trigger, "left.trigger");
+    u_var_add_bool(&state, &state.bs[0].thumbstick_gesture, "left.thumbstick_gesture");
+    u_var_add_f32(&state, &state.bs[0].thumbstick_x, "left.thumbstick_x");
+    u_var_add_f32(&state, &state.bs[0].thumbstick_y, "left.thumbstick_y");
+
+    u_var_add_f32(&state, &state.bs[0].curls[0], "left.curls[0]");
+    u_var_add_f32(&state, &state.bs[0].curls[1], "left.curls[1]");
+    u_var_add_f32(&state, &state.bs[0].curls[2], "left.curls[2]");
+    u_var_add_f32(&state, &state.bs[0].curls[3], "left.curls[3]");
+    u_var_add_f32(&state, &state.bs[0].curls[4], "left.curls[4]");
+
+    u_var_add_bool(&state, &dgs.curled[0][0], "left.curlsed[1]");
+    u_var_add_bool(&state, &dgs.curled[0][1], "left.curlsed[2]");
+    u_var_add_bool(&state, &dgs.curled[0][2], "left.curlsed[3]");
+    u_var_add_bool(&state, &dgs.curled[0][3], "left.curlsed[4]");
+
+    state.grip_instead_of_aim = true;
+
+    state.grip_orientation[0] = {60, 4, -90};
+    state.grip_position[0] = {0.04, 0.01, -0.085};
+
+    state.grip_orientation[1] = {60, -4, 90};
+    state.grip_position[1] = {-0.04, 0.01, -0.085};
+
+    state.aim_orientation[0] = {40, 15, 0};
+    state.aim_orientation[1] = {40, -15, 0};
+
+    u_var_add_vec3_f32(&state, &state.aim_orientation[0], "aim_orientation[0]");
+
+    u_var_add_vec3_f32(&state, &state.grip_orientation[0], "grip_orientation[0]");
+    u_var_add_vec3_f32(&state, &state.grip_orientation[1], "grip_orientation[1]");
+
+    u_var_add_vec3_f32(&state, &state.grip_position[0], "grip_position[0]");
+    u_var_add_vec3_f32(&state, &state.grip_position[1], "grip_position[1]");
+
+    u_var_add_bool(&state, &state.grip_instead_of_aim, "grip instead of aim");
+    u_var_add_bool(&state, &state.invert, "invert");
+
+    u_var_add_bool(&state, &state.bs[1].a, "right.a");
+    u_var_add_bool(&state, &state.bs[1].b, "right.b");
+    u_var_add_bool(&state, &state.bs[1].trigger, "right.trigger");
+    u_var_add_bool(&state, &state.bs[1].thumbstick_gesture, "right.thumbstick_gesture");
+    u_var_add_f32(&state, &state.bs[1].thumbstick_x, "right.thumbstick_x");
+    u_var_add_f32(&state, &state.bs[1].thumbstick_y, "right.thumbstick_y");
+
+    u_var_add_f32(&state, &state.bs[1].curls[0], "right.curls[0]");
+    u_var_add_f32(&state, &state.bs[1].curls[1], "right.curls[1]");
+    u_var_add_f32(&state, &state.bs[1].curls[2], "right.curls[2]");
+    u_var_add_f32(&state, &state.bs[1].curls[3], "right.curls[3]");
+    u_var_add_f32(&state, &state.bs[1].curls[4], "right.curls[4]");
+}
+
 // Errors Codes (Yes they are in the execution order lol)
 // 2 -> Missing / Incorrect args
 // 3 -> Failed to read PSVR2 data.
@@ -394,7 +460,7 @@ int main(int argc, char** argv) {
     }
 
     rootpath = argv[1];
-    // state.port = argv[2];
+    state.port = argv[2];
 
     if (argc >= 4) u_sp_log_set_file_path(argv[3]);
 
@@ -457,74 +523,13 @@ int main(int argc, char** argv) {
     //     return 7;
     // }
 
-    U_SP_LOG_I("Setting up debug [Part 1]");
-    void* sdl2_hack;
-    oxr_sdl2_hack_create(&sdl2_hack);
-
     U_SP_LOG_I("Geting camera calibration...");
 
     // We setup the cam cal for PSVR2.
     setup_camera_and_ht(state);
 
-    U_SP_LOG_I("Setting up debug [Part 2]");
-    oxr_sdl2_hack_start(sdl2_hack, nullptr, nullptr);
-
-    u_var_add_root(&state, "SteamVR driver!", 0);
-
-    u_var_add_bool(&state, &state.running, "Running");
-
-    u_var_add_bool(&state, &state.bs[0].a, "left.a");
-    u_var_add_bool(&state, &state.bs[0].b, "left.b");
-    u_var_add_bool(&state, &state.bs[0].trigger, "left.trigger");
-    u_var_add_bool(&state, &state.bs[0].thumbstick_gesture, "left.thumbstick_gesture");
-    u_var_add_f32(&state, &state.bs[0].thumbstick_x, "left.thumbstick_x");
-    u_var_add_f32(&state, &state.bs[0].thumbstick_y, "left.thumbstick_y");
-
-    u_var_add_f32(&state, &state.bs[0].curls[0], "left.curls[0]");
-    u_var_add_f32(&state, &state.bs[0].curls[1], "left.curls[1]");
-    u_var_add_f32(&state, &state.bs[0].curls[2], "left.curls[2]");
-    u_var_add_f32(&state, &state.bs[0].curls[3], "left.curls[3]");
-    u_var_add_f32(&state, &state.bs[0].curls[4], "left.curls[4]");
-
-    u_var_add_bool(&state, &dgs.curled[0][0], "left.curlsed[1]");
-    u_var_add_bool(&state, &dgs.curled[0][1], "left.curlsed[2]");
-    u_var_add_bool(&state, &dgs.curled[0][2], "left.curlsed[3]");
-    u_var_add_bool(&state, &dgs.curled[0][3], "left.curlsed[4]");
-
-    state.grip_instead_of_aim = true;
-
-    state.grip_orientation[0] = {60, 4, -90};
-    state.grip_position[0] = {0.04, 0.01, -0.085};
-
-    state.grip_orientation[1] = {60, -4, 90};
-    state.grip_position[1] = {-0.04, 0.01, -0.085};
-
-    state.aim_orientation[0] = {40, 15, 0};
-    state.aim_orientation[1] = {40, -15, 0};
-
-    u_var_add_vec3_f32(&state, &state.aim_orientation[0], "aim_orientation[0]");
-
-    u_var_add_vec3_f32(&state, &state.grip_orientation[0], "grip_orientation[0]");
-    u_var_add_vec3_f32(&state, &state.grip_orientation[1], "grip_orientation[1]");
-
-    u_var_add_vec3_f32(&state, &state.grip_position[0], "grip_position[0]");
-    u_var_add_vec3_f32(&state, &state.grip_position[1], "grip_position[1]");
-
-    u_var_add_bool(&state, &state.grip_instead_of_aim, "grip instead of aim");
-    u_var_add_bool(&state, &state.invert, "invert");
-
-    u_var_add_bool(&state, &state.bs[1].a, "right.a");
-    u_var_add_bool(&state, &state.bs[1].b, "right.b");
-    u_var_add_bool(&state, &state.bs[1].trigger, "right.trigger");
-    u_var_add_bool(&state, &state.bs[1].thumbstick_gesture, "right.thumbstick_gesture");
-    u_var_add_f32(&state, &state.bs[1].thumbstick_x, "right.thumbstick_x");
-    u_var_add_f32(&state, &state.bs[1].thumbstick_y, "right.thumbstick_y");
-
-    u_var_add_f32(&state, &state.bs[1].curls[0], "right.curls[0]");
-    u_var_add_f32(&state, &state.bs[1].curls[1], "right.curls[1]");
-    u_var_add_f32(&state, &state.bs[1].curls[2], "right.curls[2]");
-    u_var_add_f32(&state, &state.bs[1].curls[3], "right.curls[3]");
-    u_var_add_f32(&state, &state.bs[1].curls[4], "right.curls[4]");
+    void* sdl2_hack;
+    setup_debug(state, sdl2_hack);
 
     const int IMAGE_WIDTH = 1016;
     const int IMAGE_HEIGHT = 1024;
@@ -557,9 +562,9 @@ int main(int argc, char** argv) {
         //TODO: BC4-Decode on the GPU. We need to undistort as well, and it just takes too long.
         // When hand is visibile framerate drops to 30 fps (~30ms/frame), this is bad.
 
-        // BC4 Decompression (It's on the CPU, it's not great, it's fast enough!)
-        // If I end up needing to undistort it as well, I will move this to the GPU.
+        // BC4 Decompression (It's on the CPU, it's not great, it's fast enough (sometimes)!)
         for (int i = 0; i < 2; i++) {
+            // create_undistortion_mesh(1016, 1016, 1, cam_intrinsics, cam_params, vertices, indices);
             uint8_t* raw_src = (i == 0) ? raw_bc4_left.data() : raw_bc4_right.data();
             uint8_t* l8_dst = (i == 0) ? raw_l8_left.data() : raw_l8_right.data();
 

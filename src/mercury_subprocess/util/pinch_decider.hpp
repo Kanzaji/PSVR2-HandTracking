@@ -1,6 +1,4 @@
 #pragma once
-#include <iostream>
-#include "math/m_space.h"
 #include "u_subprocess_logging.h"
 #include "math/m_vec3.h"
 #include "debouncer.hpp"
@@ -16,7 +14,7 @@ decide(xrt_vec3 one, xrt_vec3 two, bool* out) {
 
     debounce(dist, activation_dist, deactivation_dist, out);
 
-    U_SP_LOG_E("Meow! %f %d", dist, *out);
+    U_SP_LOG_E("Decision! %f %d", dist, *out);
 }
 
 static void trigger_decide(struct xrt_hand_joint_set& joint_set, bool* out) {

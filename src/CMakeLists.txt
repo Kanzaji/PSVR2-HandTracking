@@ -1,2 +1,4 @@
 add_subdirectory(util)
 add_subdirectory(steamvr_driver)
+add_subdirectory(mercury_subprocess)
+add_subdirectory(psvr2)

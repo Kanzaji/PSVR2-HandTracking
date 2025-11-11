@@ -3,7 +3,7 @@
 
 #include "os/os_time.h"
 #include "openvr.h"
-#include "tracking_subprocess_protocol.hpp"
+#include "../tracking_subprocess_protocol.hpp"
 
 // 80 milliseconds. I'm so sorry.
 #define MAX_TIME_BETWEEN_GESTURES 80 * U_TIME_1MS_IN_NS

@@ -9,16 +9,18 @@
 // WinSock2
 #pragma comment(lib, "ws2_32.lib")
 
-#include "util/path_utils.h"
-#include "driver_log.h"
-#include "vive/vive_config.h"
+// Monado
 #include "../../monado/src/xrt/tracking/hand/mercury/hg_interface.h"
 #include "tracking/t_frame_cv_mat_wrapper.hpp"
-#include "os/os_time.h"
-#include "oxr_sdl2_hack.h"
-
-#include "tracking_subprocess_protocol.hpp"
 #include "math/m_relation_history.h"
+#include "os/os_time.h"
+
+// Subprocess
+#include "../mercury_subprocess/tracking_subprocess_protocol.hpp"
+
+// Current
+#include "driver_log.h"
+#include "util/path_utils.h"
 
 namespace xat = xrt::auxiliary::tracking;
 

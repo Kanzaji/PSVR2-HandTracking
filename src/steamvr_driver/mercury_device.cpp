@@ -2,6 +2,7 @@
 
 #include "driver_log.h"
 #include "math/m_relation_history.h"
+#include "math/m_space.h"
 #include "os/os_time.h"
 
 MercuryHandDevice::MercuryHandDevice(vr::ETrackedControllerRole role) : role_(role) {

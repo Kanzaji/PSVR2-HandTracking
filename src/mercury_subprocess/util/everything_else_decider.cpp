@@ -1,5 +1,3 @@
-// HEY. I'M REALLY TIRED AS I WRITE THIS. PLEASE READ IT CRITICALLY.
-
 #include "everything_else_decider.hpp"
 #include "get_finger_curls.hpp"
 
@@ -9,8 +7,6 @@
 #include "debouncer.hpp"
 #include "u_subprocess_logging.h"
 #include "math/m_space.h"
-
-#define meow_printf U_SP_LOG_E
 
 //!@todo I hate to write global state in but I'm on a huge time crunch and don't have external reviewers. Please make this more reasonable.
 // struct decider_global_state
@@ -153,7 +149,7 @@ void thumbstick(xrt_pose hand0, xrt_pose hand1, float& thumbstick_value_y, float
         {
             thumbstick_value_x = -hand_x(hand0, hand1);
 
-            meow_printf("%f", thumbstick_value_x);
+            U_SP_LOG_I("%f", thumbstick_value_x);
 
             // I think this deadzone stuff is good
             float deadzone_value = 0.0125;
@@ -165,7 +161,7 @@ void thumbstick(xrt_pose hand0, xrt_pose hand1, float& thumbstick_value_y, float
             }
 
             thumbstick_value_x *= 8;
-            meow_printf("%f", thumbstick_value_x);
+            U_SP_LOG_I("%f", thumbstick_value_x);
         }
 
         return;
@@ -342,13 +338,13 @@ void decide_everything_else(tracking_message& msg, xrt_pose head, bool& grip_ins
     system_button(dec);
     swap_grip_instead_of_aim(dec);
 
-    // meow_printf("%f", quat_difference(dec.hands_head_local[0].orientation, up_pose));
-    // meow_printf("%f", quat_difference(up_pose_2, up_pose));
+    // U_SP_LOG_I("%f", quat_difference(dec.hands_head_local[0].orientation, up_pose));
+    // U_SP_LOG_I("%f", quat_difference(up_pose_2, up_pose));
 
-    // meow_printf("%f %f %f %f, %f %f %f %f", dec.hands_head_local[0].orientation.w, dec.hands_head_local[0].orientation.x, dec.hands_head_local[0].orientation.y, dec.hands_head_local[0].orientation.z,
+    // U_SP_LOG_I("%f %f %f %f, %f %f %f %f", dec.hands_head_local[0].orientation.w, dec.hands_head_local[0].orientation.x, dec.hands_head_local[0].orientation.y, dec.hands_head_local[0].orientation.z,
     //             up_pose_2.w, up_pose_2.x, up_pose_2.y, up_pose_2.z);
 
-    // meow_printf("%f %f %f %f, %f %f %f %f", dec.hands_head_local[0].orientation.w,
+    // U_SP_LOG_I("%f %f %f %f, %f %f %f %f", dec.hands_head_local[0].orientation.w,
     //             dec.hands_head_local[0].orientation.x, dec.hands_head_local[0].orientation.y,
     //             dec.hands_head_local[0].orientation.z,
     //             dec.hands_head_local[1].orientation.w, dec.hands_head_local[1].orientation.x,

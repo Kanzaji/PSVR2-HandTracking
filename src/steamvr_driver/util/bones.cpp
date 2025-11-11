@@ -5,8 +5,7 @@
 #include "math/m_vec3.h"
 
 template <class T, class U>
-void convert_quaternion(const T &p_quatA, U &p_quatB)
-{
+void convert_quaternion(const T& p_quatA, U& p_quatB) {
     p_quatB.x = p_quatA.x;
     p_quatB.y = p_quatA.y;
     p_quatB.z = p_quatA.z;
@@ -14,8 +13,7 @@ void convert_quaternion(const T &p_quatA, U &p_quatB)
 }
 
 static xrt_quat
-ApplyBoneHandTransform(xrt_quat p_rot, vr::ETrackedControllerRole role)
-{
+ApplyBoneHandTransform(xrt_quat p_rot, vr::ETrackedControllerRole role) {
     std::swap(p_rot.x, p_rot.z);
     p_rot.z *= -1.f;
     if (role == vr::TrackedControllerRole_RightHand)
@@ -27,19 +25,19 @@ ApplyBoneHandTransform(xrt_quat p_rot, vr::ETrackedControllerRole role)
 }
 
 static void
-MetacarpalJointsToBoneTransform(struct xrt_hand_joint_set *hand_joint_set,
-                                vr::VRBoneTransform_t *out_bone_transforms,
-                                vr::ETrackedControllerRole role)
-{
-    struct xrt_hand_joint_value *joint_values = hand_joint_set->values.hand_joint_set_default;
+MetacarpalJointsToBoneTransform(struct xrt_hand_joint_set* hand_joint_set,
+                                vr::VRBoneTransform_t* out_bone_transforms,
+                                vr::ETrackedControllerRole role) {
+    struct xrt_hand_joint_value* joint_values = hand_joint_set->values.hand_joint_set_default;
 
     // Apply orientations for four-finger metacarpals.
     for (int joint :
-         {XRT_HAND_JOINT_THUMB_METACARPAL, XRT_HAND_JOINT_INDEX_METACARPAL, XRT_HAND_JOINT_MIDDLE_METACARPAL,
-          XRT_HAND_JOINT_RING_METACARPAL, XRT_HAND_JOINT_LITTLE_METACARPAL})
-    {
-        struct xrt_hand_joint_value *current_joint = &joint_values[joint];
-        struct xrt_hand_joint_value *parent_joint = &joint_values[XRT_HAND_JOINT_WRIST];
+         {
+             XRT_HAND_JOINT_THUMB_METACARPAL, XRT_HAND_JOINT_INDEX_METACARPAL, XRT_HAND_JOINT_MIDDLE_METACARPAL,
+             XRT_HAND_JOINT_RING_METACARPAL, XRT_HAND_JOINT_LITTLE_METACARPAL
+         }) {
+        struct xrt_hand_joint_value* current_joint = &joint_values[joint];
+        struct xrt_hand_joint_value* parent_joint = &joint_values[XRT_HAND_JOINT_WRIST];
 
         xrt_quat diff_openxr;
         // These should do the exact same things.
@@ -62,8 +60,7 @@ MetacarpalJointsToBoneTransform(struct xrt_hand_joint_set *hand_joint_set,
         magic_prerotate.y = -0.5;
         magic_prerotate.z = 0.5;
 
-        if (role == vr::TrackedControllerRole_RightHand)
-        {
+        if (role == vr::TrackedControllerRole_RightHand) {
             magic_prerotate.y *= -1.f;
             magic_prerotate.x *= -1.f;
         }
@@ -84,31 +81,27 @@ MetacarpalJointsToBoneTransform(struct xrt_hand_joint_set *hand_joint_set,
         out_bone_transforms[joint].position.v[2] = -translation_wrist_rel.z;
         out_bone_transforms[joint].position.v[3] = 1.f;
 
-        if (role == vr::TrackedControllerRole_RightHand)
-        {
+        if (role == vr::TrackedControllerRole_RightHand) {
             out_bone_transforms[joint].position.v[1] *= -1.f;
         }
     }
 }
 
 static void
-FlexionJointsToBoneTransform(struct xrt_hand_joint_set *hand_joint_set,
-                             vr::VRBoneTransform_t *out_bone_transforms,
-                             vr::ETrackedControllerRole role)
-{
-    struct xrt_hand_joint_value *joint_values = hand_joint_set->values.hand_joint_set_default;
+FlexionJointsToBoneTransform(struct xrt_hand_joint_set* hand_joint_set,
+                             vr::VRBoneTransform_t* out_bone_transforms,
+                             vr::ETrackedControllerRole role) {
+    struct xrt_hand_joint_value* joint_values = hand_joint_set->values.hand_joint_set_default;
 
     // Apply orientations for four-finger pxm and onward
     int parent;
-    for (int joint = XRT_HAND_JOINT_THUMB_METACARPAL; joint < XRT_HAND_JOINT_COUNT; joint++)
-    {
-        if (u_hand_joint_is_metacarpal((xrt_hand_joint)joint))
-        {
+    for (int joint = XRT_HAND_JOINT_THUMB_METACARPAL; joint < XRT_HAND_JOINT_COUNT; joint++) {
+        if (u_hand_joint_is_metacarpal((xrt_hand_joint)joint)) {
             parent = joint;
             continue;
         }
-        struct xrt_hand_joint_value *current_joint = &joint_values[joint];
-        struct xrt_hand_joint_value *parent_joint = &joint_values[parent];
+        struct xrt_hand_joint_value* current_joint = &joint_values[joint];
+        struct xrt_hand_joint_value* parent_joint = &joint_values[parent];
 
         xrt_quat diff_openxr;
         math_quat_unrotate(&parent_joint->relation.pose.orientation, &current_joint->relation.pose.orientation,
@@ -123,8 +116,7 @@ FlexionJointsToBoneTransform(struct xrt_hand_joint_set *hand_joint_set,
         // OpenVR left hand has +X forward. Weird, huh?
         out_bone_transforms[joint].position = {bone_length, 0, 0, 1};
 
-        if (role == vr::TrackedControllerRole_RightHand)
-        {
+        if (role == vr::TrackedControllerRole_RightHand) {
             out_bone_transforms[joint].position.v[0] *= -1.f;
         }
 
@@ -135,22 +127,21 @@ FlexionJointsToBoneTransform(struct xrt_hand_joint_set *hand_joint_set,
 #define DEG_TO_RAD(DEG) (DEG * M_PI / 180.)
 
 void HandJointSetToBoneTransform(struct xrt_hand_joint_set hand_joint_set,
-                                 vr::VRBoneTransform_t *out_bone_transforms,
+                                 vr::VRBoneTransform_t* out_bone_transforms,
                                  vr::ETrackedControllerRole role,
-                                 xrt_pose root_pose)
-{
+                                 xrt_pose root_pose) {
     // fill bone transforms with a default open pose to manipulate later
 
-    vr::VRBoneTransform_t ident = {{0.000000f, 0.000000f, 0.000000f, 1.000000f}, {1.000000f, 0.000000f, 0.000000f, 0.000000f}};
+    vr::VRBoneTransform_t ident = {
+        {0.000000f, 0.000000f, 0.000000f, 1.000000f}, {1.000000f, 0.000000f, 0.000000f, 0.000000f}
+    };
 
-    for (int i : {0, 1})
-    {
+    for (int i : {0, 1}) {
         out_bone_transforms[i] = ident;
     }
 
     // I have no idea why these are required, nor why they are different per hand. (meowses)
-    if (role == vr::TrackedControllerRole_LeftHand)
-    {
+    if (role == vr::TrackedControllerRole_LeftHand) {
         xrt_quat x_180_z_neg90 = {};
 
         // Don't try to make these bracket-initializers! If you switch back to HmdQuaternionf you'll be sad because they have different w-ordering
@@ -160,10 +151,7 @@ void HandJointSetToBoneTransform(struct xrt_hand_joint_set hand_joint_set,
         x_180_z_neg90.z = 0.0f;
 
         math_quat_rotate(&root_pose.orientation, &x_180_z_neg90, &root_pose.orientation);
-    }
-
-    else
-    {
+    } else {
         xrt_quat x_180_z_90 = {};
         x_180_z_90.w = 0.0f;
         x_180_z_90.x = 0.707f;
@@ -185,8 +173,9 @@ void HandJointSetToBoneTransform(struct xrt_hand_joint_set hand_joint_set,
 
 // these are currently only used for the root and wrist transforms, but are kept here as they are useful for debugging.
 vr::VRBoneTransform_t rightOpenPose[OPENVR_BONE_COUNT] = {
-    {{0.000000f, 0.000000f, 0.000000f, 1.000000f}, {1.000000f, 0.000000f, 0.000000f, 0.000000f}},    // WTF is this?
-    {{0.034038f, 0.036503f, 0.164722f, 1.000000f}, {-0.055147f, -0.078608f, 0.920279f, -0.379296f}}, // WTF is this? Offset from Index "aim pose" to the wrist???
+    {{0.000000f, 0.000000f, 0.000000f, 1.000000f}, {1.000000f, 0.000000f, 0.000000f, 0.000000f}}, // WTF is this?
+    {{0.034038f, 0.036503f, 0.164722f, 1.000000f}, {-0.055147f, -0.078608f, 0.920279f, -0.379296f}},
+    // WTF is this? Offset from Index "aim pose" to the wrist???
     //
     {{0.012083f, 0.028070f, 0.025050f, 1.000000f}, {0.567418f, -0.464112f, 0.623374f, -0.272106f}}, // Thumb
     {{-0.040406f, -0.000000f, 0.000000f, 1.000000f}, {0.994838f, 0.082939f, 0.019454f, 0.055130f}},
