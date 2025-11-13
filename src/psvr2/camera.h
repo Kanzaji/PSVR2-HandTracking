@@ -13,4 +13,4 @@ constexpr size_t L8_UNCOMPRESSED_SIZE = 1024 * 1024; // 1MB
 
 bool get_cam_calib(t_stereo_camera_calibration **calibRef, xrt_pose *head_in_left, SharedMemoryData &shared_memory_data);
 
-float get_camera_frames(SharedMemoryData &shared_memory_data, xrt_frame* frames[]);
+bool get_camera_frames(SharedMemoryData &shared_memory_data, xrt_frame* frames[], uint32_t &latest_timestamp);

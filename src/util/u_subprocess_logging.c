@@ -18,7 +18,7 @@
 #include <stdlib.h> // abort()
 
 
-DEBUG_GET_ONCE_LOG_OPTION(global_log, "XRT_LOG", U_SP_LOGGING_WARN)
+DEBUG_GET_ONCE_LOG_OPTION(global_log, "XRT_LOG", U_SP_LOGGING_INFO)
 
 enum u_sp_logging_level
 u_sp_log_get_global_level(void) {

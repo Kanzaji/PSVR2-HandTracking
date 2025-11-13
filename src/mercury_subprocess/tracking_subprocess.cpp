@@ -25,7 +25,6 @@
 #include "debug/debug.h"
 #include "u_subprocess_logging.h"
 #include "tracking_subprocess.h"
-#include "ipc.h"
 
 namespace xat = xrt::auxiliary::tracking;
 
@@ -49,22 +48,22 @@ bool setup_camera_and_ht(subprocess_state& state) {
     info.views[0].boundary_type = HT_IMAGE_BOUNDARY_CIRCLE;
     info.views[1].boundary_type = HT_IMAGE_BOUNDARY_CIRCLE;
 
-    // No clue if those are in practice any good for PSVR2. We will see!
+    // Taken from: https://gitlab.freedesktop.org/Beyley/monado/-/blob/dev-psvr2/src/xrt/drivers/psvr2/psvr2.c?ref_type=heads
     info.views[0].boundary.circle.normalized_center.x = 0.5f;
     info.views[0].boundary.circle.normalized_center.y = 0.5f;
 
     info.views[1].boundary.circle.normalized_center.x = 0.5f;
     info.views[1].boundary.circle.normalized_center.y = 0.5f;
 
-    info.views[0].boundary.circle.normalized_radius = 0.55;
-    info.views[1].boundary.circle.normalized_radius = 0.55;
+    info.views[0].boundary.circle.normalized_radius = 0.58;
+    info.views[1].boundary.circle.normalized_radius = 0.58;
 
     char rpath[512];
     strcpy_s(rpath, rootpath);
     strcat_s(rpath, R"(\resources\internal\hand-tracking-models\)");
     state.sync = t_hand_tracking_sync_mercury_create(calib, create_info, rpath);
 
-    // // Suggestions. These are suitable for head tracking.
+    // Suggestions. These are suitable for head tracking.
     for (int i = 0; i < 2; i++) {
         m_filter_euro_vec3_init(&state.vector_filters[i], FCMIN, FCMIN_D, OUR_BETA);
         m_filter_euro_quat_init(&state.quat_filters[i], FCMIN_QUAT, FCMIN_D_QUAT, OUR_BETA_QUAT);
@@ -156,28 +155,27 @@ int main(int argc, char** argv) {
     // We setup the cam cal for PSVR2.
     setup_camera_and_ht(state);
 
+
+    uint32_t latest_timestamp = 0;
     while (state.running) {
         if (!check_vrserver_alive(state)) break;
 
         xrt_frame* frames[2] = {nullptr, nullptr};
         char const* failure_reason = nullptr;
-        const auto time_now = static_cast<float>(os_monotonic_get_ns());
-        float time_camera = time_now;
         try {
-            time_camera = get_camera_frames(state.shared_memory_data, frames); //TODO: Get actual cam time data.
+            // We skip the same frames.
+            if (!get_camera_frames(state.shared_memory_data, frames, latest_timestamp)) continue;
         } catch (const std::runtime_error& e) {
             failure_reason = e.what();
         }
-        // double time_camera = state.cap.get(cv::CAP_PROP_POS_MSEC) * 1e6;
-        // float time_ratio = time_now / time_camera; // This is used for what?
-
-        const float time_diff = time_camera - time_now;
-        const float time_diff_s = time_diff / static_cast<float>(U_TIME_1S_IN_NS);
 
         vr::TrackedDevicePose_t hmd_pose{};
 
+        // We don't compensate for the frame delay, as we don't really have a time the frame arrives,
+        // if we process stuff, we expect it to be "from this instant".
+        // TODO: Verify we can just do that
         state.vr_system->GetDeviceToAbsoluteTrackingPose(
-            vr::ETrackingUniverseOrigin::TrackingUniverseRawAndUncalibrated, time_diff_s, &hmd_pose, 1);
+            vr::ETrackingUniverseOrigin::TrackingUniverseRawAndUncalibrated, 0, &hmd_pose, 1);
 
         // xrt_pose attached_hmd_pose = GetPose(hmd_pose.mDeviceToAbsoluteTracking);
 

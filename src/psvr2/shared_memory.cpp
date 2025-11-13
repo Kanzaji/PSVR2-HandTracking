@@ -111,8 +111,7 @@ bool get_distortion_config(SharedMemoryData& data, int cameraId, CameraParameter
     return true;
 }
 
-bool copy_latest_image_buffer(SharedMemoryData& data, void* leftCameraData, void* rightCameraData,
-                              size_t cameraDataSize) {
+bool copy_latest_image_buffer(SharedMemoryData& data, void* leftCameraData, void* rightCameraData, size_t cameraDataSize, uint32_t &timestamp) {
     if (WaitForSingleObject(data.hImageEvent, INFINITE) != WAIT_OBJECT_0) return false;
     if (WaitForSingleObject(data.hImageMutex, INFINITE) != WAIT_OBJECT_0) return false;
 
@@ -120,48 +119,52 @@ bool copy_latest_image_buffer(SharedMemoryData& data, void* leftCameraData, void
     uint32_t latestIndex = 0;
 
     // Get the most recent camera frame based on which entry is the latest by timestamp.
-    if (*(int*)(data.imageMemBase + 0x3c10) - 1U < 2) {
-        latestTimestamp = *(uint32_t*)(data.imageMemBase + 0x3c18);
+    if (*reinterpret_cast<int*>(data.imageMemBase + 0x3c10) - 1U < 2) {
         latestIndex = 0;
+        latestTimestamp = *reinterpret_cast<uint32_t*>(data.imageMemBase + 0x3c18);
     }
-    if ((*(int*)(data.imageMemBase + 0x4488) - 1U < 2) && (latestTimestamp <= *(uint32_t*)(data.imageMemBase +
-        0x4490))) {
+    if (*reinterpret_cast<int*>(data.imageMemBase + 0x4488) - 1U < 2 && latestTimestamp <= *reinterpret_cast<uint32_t*>(data.imageMemBase + 0x4490)) {
         latestIndex = 1;
-        latestTimestamp = *(uint32_t*)(data.imageMemBase + 0x4490);
+        latestTimestamp = *reinterpret_cast<uint32_t*>(data.imageMemBase + 0x4490);
     }
-    if ((*(int*)(data.imageMemBase + 0x4d00) - 1U < 2) && (latestTimestamp <= *(uint32_t*)(data.imageMemBase +
-        0x4d08))) {
+    if (*reinterpret_cast<int*>(data.imageMemBase + 0x4d00) - 1U < 2 && latestTimestamp <= *reinterpret_cast<uint32_t*>(data.imageMemBase + 0x4d08)) {
         latestIndex = 2;
-        latestTimestamp = *(uint32_t*)(data.imageMemBase + 0x4d08);
+        latestTimestamp = *reinterpret_cast<uint32_t*>(data.imageMemBase + 0x4d08);
     }
-    if ((*(int*)(data.imageMemBase + 0x5578) - 1U < 2) && (latestTimestamp <= *(uint32_t*)(data.imageMemBase +
-        0x5580))) {
+    if (*reinterpret_cast<int*>(data.imageMemBase + 0x5578) - 1U < 2 && (latestTimestamp <= *reinterpret_cast<uint32_t*>(data.imageMemBase + 0x5580))) {
         latestIndex = 3;
-        latestTimestamp = *(uint32_t*)(data.imageMemBase + 0x5580);
+        latestTimestamp = *reinterpret_cast<uint32_t*>(data.imageMemBase + 0x5580);
     }
-    if ((*(int*)(data.imageMemBase + 0x5df0) - 1U < 2) && (latestTimestamp <= *(uint32_t*)(data.imageMemBase +
-        0x5df8))) {
+    if (*reinterpret_cast<int*>(data.imageMemBase + 0x5df0) - 1U < 2 && latestTimestamp <= *reinterpret_cast<uint32_t*>(data.imageMemBase + 0x5df8)) {
         latestIndex = 4;
-        latestTimestamp = *(uint32_t*)(data.imageMemBase + 0x5df8);
+        latestTimestamp = *reinterpret_cast<uint32_t*>(data.imageMemBase + 0x5df8);
     }
-    if ((*(int*)(data.imageMemBase + 0x6668) - 1U < 2) && (latestTimestamp <= *(uint32_t*)(data.imageMemBase +
-        0x6670))) {
+    if (*reinterpret_cast<int*>(data.imageMemBase + 0x6668) - 1U < 2 && latestTimestamp <= *reinterpret_cast<uint32_t*>(data.imageMemBase + 0x6670)) {
         latestIndex = 5;
-        latestTimestamp = *(uint32_t*)(data.imageMemBase + 0x6670);
+        latestTimestamp = *reinterpret_cast<uint32_t*>(data.imageMemBase + 0x6670);
     }
-    if ((*(int*)(data.imageMemBase + 0x6ee0) - 1U < 2) && (latestTimestamp <= *(uint32_t*)(data.imageMemBase +
-        0x6ee8))) {
+    if (*reinterpret_cast<int*>(data.imageMemBase + 0x6ee0) - 1U < 2 && latestTimestamp <= *reinterpret_cast<uint32_t*>(data.imageMemBase + 0x6ee8)) {
         latestIndex = 6;
-        latestTimestamp = *(uint32_t*)(data.imageMemBase + 0x6ee8);
+        latestTimestamp = *reinterpret_cast<uint32_t*>(data.imageMemBase + 0x6ee8);
     }
-    if ((*(int*)(data.imageMemBase + 0x7758) - 1U < 2) && (latestTimestamp <= *(uint32_t*)(data.imageMemBase +
-        0x7760))) { latestIndex = 7; }
+    if (*reinterpret_cast<int*>(data.imageMemBase + 0x7758) - 1U < 2 && latestTimestamp <= *reinterpret_cast<uint32_t*>(data.imageMemBase + 0x7760)) {
+        latestIndex = 7;
+        latestTimestamp = *reinterpret_cast<uint32_t*>(data.imageMemBase + 0x7760);
+    }
+
+    // We skip the frame as it's the same as previous one.
+    if (latestTimestamp == timestamp) {
+        ReleaseMutex(data.hImageMutex);
+        return false;
+    }
 
     const char* data_ptr = data.imageMemBase + IMAGE_BUFFER_OFFSET + (PER_CAMERA_BUFFER_STRIDE * latestIndex);
     memcpy(leftCameraData, data_ptr, cameraDataSize);
     memcpy(rightCameraData, data_ptr + cameraDataSize, cameraDataSize);
 
     if (!ReleaseMutex(data.hImageMutex)) return false;
+
+    timestamp = latestTimestamp;
 
     return true;
 }
