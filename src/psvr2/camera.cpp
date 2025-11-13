@@ -1,11 +1,13 @@
 #include "camera.h"
-
 #include "bcdec.h"
 #include "tracking/t_frame_cv_mat_wrapper.hpp"
 #include "math/m_filter_one_euro.h"
 #include "os/os_time.h"
 #include "util/u_frame.h"
 #include <vector>
+//#include <Eigen/src/Core/Matrix.h>
+#include "tinyceres/tiny_solver.hpp"
+#include "tinyceres/tiny_solver_autodiff_function.hpp"
 
 static uint8_t lut[256];
 
@@ -15,11 +17,101 @@ void camera_fill_lut() {
 
         const double transformed = powf((color - 0.065) * 4, 1.0 / 2.2);
 
-        const auto result = static_cast<uint8_t>(CLAMP((int)(transformed * 255.0), 0, 255));
+        const uint8_t result = static_cast<uint8_t>(CLAMP((int)(transformed * 255.0), 0, 255));
 
         lut[i] = result;
     }
 }
+
+//TODO: Make sure 21 is good for PSVR2. Taken from Rift S.
+#define STEPS 21
+
+template <typename T>
+bool
+kb4_distort_func(struct t_camera_calibration *calib, const T *distortion_params, const double point[2], T *out_point) {
+    const double x = point[0];
+    const double y = point[1];
+
+    const double r2 = x * x + y * y;
+    const double r = sqrt(r2);
+
+    const double fx = calib->intrinsics[0][0];
+    const double fy = calib->intrinsics[1][1];
+
+    const double cx = calib->intrinsics[0][2];
+    const double cy = calib->intrinsics[1][2];
+
+    if (r < 1e-8) {
+        out_point[0] = T(fx * x + cx);
+        out_point[1] = T(fy * y + cy);
+        return true;
+    }
+
+    const double theta = atan(r);
+    const double theta2 = theta * theta;
+
+    const T k1 = distortion_params[0];
+    const T k2 = distortion_params[1];
+    const T k3 = distortion_params[2];
+    const T k4 = distortion_params[3];
+
+    T r_theta = k4 * theta2;
+
+    r_theta += k3;
+    r_theta *= theta2;
+    r_theta += k2;
+    r_theta *= theta2;
+    r_theta += k1;
+    r_theta *= theta2;
+    r_theta += 1;
+    r_theta *= theta;
+
+    const T mx = x * r_theta / r;
+    const T my = y * r_theta / r;
+
+    out_point[0] = fx * mx + cx;
+    out_point[1] = fy * my + cy;
+
+    return true;
+}
+
+struct TargetPoint {
+    double point[2];
+    double distorted[2];
+};
+
+constexpr int N_KB4_DISTORT_PARAMS = 4;
+
+struct DistortParamKB4CostFunctor {
+    DistortParamKB4CostFunctor(struct t_camera_calibration *calib, int nSteps, TargetPoint *targetPointGrid)
+        : m_calib(calib), m_nSteps(nSteps), m_targetPointGrid(targetPointGrid)
+    {}
+
+    struct t_camera_calibration *m_calib;
+    int m_nSteps;
+    TargetPoint *m_targetPointGrid;
+
+    template <typename T>
+    bool
+    operator()(const T *const distort_params, T *residual) const {
+        T out_point[2];
+
+        for (int y_index = 0; y_index < m_nSteps; y_index++) {
+            for (int x_index = 0; x_index < m_nSteps; x_index++) {
+                int residual_index = 2 * (y_index * m_nSteps + x_index);
+                TargetPoint *p = &m_targetPointGrid[(y_index * m_nSteps) + x_index];
+
+                if (!kb4_distort_func<T>(m_calib, distort_params, p->point, out_point))
+                    return false;
+
+                residual[residual_index + 0] = out_point[0] - p->distorted[0];
+                residual[residual_index + 1] = out_point[1] - p->distorted[1];
+            }
+        }
+
+        return true;
+    }
+};
 
 bool get_cam_calib(t_stereo_camera_calibration **calibRef, xrt_pose *head_in_left, SharedMemoryData &shared_memory_data) {
 	t_stereo_camera_calibration *calib = nullptr;
@@ -27,10 +119,10 @@ bool get_cam_calib(t_stereo_camera_calibration **calibRef, xrt_pose *head_in_lef
 
     for (int i = 0; i < 2; i++) {
         t_camera_calibration camCalib{};
-        CameraParameters camParams{};
         CameraIntrinsics camIntrinsics{};
+        CameraParameters camParams{};
 
-        if (!get_distortion_config(shared_memory_data, i, camParams, camIntrinsics)) {
+        if ( !get_distortion_config(shared_memory_data, i, camParams, camIntrinsics)) {
             return false;
         }
 
@@ -46,12 +138,65 @@ bool get_cam_calib(t_stereo_camera_calibration **calibRef, xrt_pose *head_in_lef
         camCalib.intrinsics[2][1] = 0.0f;
         camCalib.intrinsics[2][2] = 1.0f;
         camCalib.distortion_model = T_DISTORTION_FISHEYE_KB4;
+
+        TargetPoint xy[STEPS * STEPS];
+
+        // 1. Calculate the Normalized Undistorted Viewplane Boundaries
+        // The min/max normalized coordinates that map to the image edges (0 to W-1/H-1).
+        const double X_MIN = (0.0 - camIntrinsics.cx) / camIntrinsics.fx;
+        const double X_MAX = (1024 - 1.0 - camIntrinsics.cx) / camIntrinsics.fx;
+        const double Y_MIN = (0.0 - camIntrinsics.cy) / camIntrinsics.fy;
+        const double Y_MAX = (1024 - 1.0 - camIntrinsics.cy) / camIntrinsics.fy;
+
+        const double X_RANGE = X_MAX - X_MIN;
+        const double Y_RANGE = Y_MAX - Y_MIN;
+
+        /* Calculate distortion grid by iterating over the UNDISTORTED viewplane */
+        for (int y_index = 0; y_index < STEPS; y_index++) {
+            for (int x_index = 0; x_index < STEPS; x_index++) {
+
+                // 2. Generate the Undistorted Normalized Coordinate (p->point)
+                // Linearly interpolate between X_MIN/Y_MIN and X_MAX/Y_MAX
+                double norm_x = X_MIN + (x_index / static_cast<double>((STEPS - 1))) * X_RANGE;
+                double norm_y = Y_MIN + (y_index / static_cast<double>((STEPS - 1))) * Y_RANGE;
+
+                TargetPoint *p = &xy[(y_index * STEPS) + x_index];
+
+                // Store the undistorted normalized point (Input for KB4)
+                p->point[0] = norm_x;
+                p->point[1] = norm_y;
+
+                // 3. Calculate the Distorted Normalized Coordinate (using the PSVR2 model)
+                // We use a zoom factor of 1.0 as we are calculating the core distortion curve
+                DirectX::XMFLOAT2 distorted_norm = get_distorted_point(norm_x * 1.0, norm_y * 1.0, camParams);
+
+                // 4. Convert the Distorted Normalized Coordinate to Distorted Pixel (p->distorted)
+                // This is the ground truth target for the KB4 fit
+                p->distorted[0] = distorted_norm.x * camIntrinsics.fx + camIntrinsics.cx;
+                p->distorted[1] = distorted_norm.y * camIntrinsics.fy + camIntrinsics.cy;
+            }
+        }
+
+        Eigen::Matrix<double, N_KB4_DISTORT_PARAMS, 1> kb4_distort_params{0, 0, 0, 0};
+
+        using AutoDiffDistortParamKB4Function = ceres::TinySolverAutoDiffFunction<DistortParamKB4CostFunctor, 2 * STEPS * STEPS, N_KB4_DISTORT_PARAMS>;
+        DistortParamKB4CostFunctor distort_param_kb4_functor(&camCalib, STEPS, xy);
+        AutoDiffDistortParamKB4Function func(distort_param_kb4_functor);
+
+        ceres::TinySolver<AutoDiffDistortParamKB4Function> solver;
+        solver.Solve(func, &kb4_distort_params);
+
+        camCalib.kb4.k1 = kb4_distort_params[0];
+        camCalib.kb4.k2 = kb4_distort_params[1];
+        camCalib.kb4.k3 = kb4_distort_params[2];
+        camCalib.kb4.k4 = kb4_distort_params[3];
+
         //TODO: Curve-fit PSVR2 to this.
         // Currently taken from https://gitlab.freedesktop.org/Beyley/monado/-/blob/dev-psvr2/src/xrt/drivers/psvr2/psvr2.c?ref_type=heads
-        camCalib.kb4.k1 = 0.027694760153821763,
-        camCalib.kb4.k2 = -0.015417764941581483,
-        camCalib.kb4.k3 = 0.0068598424886571066,
-        camCalib.kb4.k4 = -0.00171888994824757,
+        //camCalib.kb4.k1 = 0.027694760153821763;
+        //camCalib.kb4.k2 = -0.015417764941581483;
+        //camCalib.kb4.k3 = 0.0068598424886571066;
+        //camCalib.kb4.k4 = -0.00171888994824757;
 
         calib->view[i] = camCalib;
     }

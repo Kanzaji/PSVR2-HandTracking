@@ -9,6 +9,10 @@ target_link_libraries(psvr2_integration PRIVATE
         ${OpenCV_LIBRARIES}
         xrt-interfaces
         aux_util
+        aux_util_sink
+        aux_math
+        xrt-external-tinyceres
+        xrt-external-cjson
         aux_vive
         t_ht_mercury
         hand_async
