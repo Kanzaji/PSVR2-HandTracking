@@ -211,10 +211,11 @@ bool get_cam_calib(t_stereo_camera_calibration **calibRef, xrt_pose *head_in_lef
     memcpy(calib->camera_rotation, rotation, sizeof(rotation));
     memcpy(calib->camera_translation, translation, sizeof(translation));
 
-    //TODO: Find a proper HeadRef for PSVR2. This is still stollen from Index.
-    xrt_vec3 plus_x {-1,0,0};
-    xrt_vec3 plus_z {0,-0,-1};
-    xrt_pose headRef {0,0,0,0, 0,0, -0.01092000026255846};
+    //TODO: Find a proper HeadRef for PSVR2.
+    // plus_x 0 0 0 plus_z 0 0 0 and headRef 0 0 0 0 0 0 makes hands show up too high in front of the HMD.
+    xrt_vec3 plus_x {0,0,0};
+    xrt_vec3 plus_z {0,0,0};
+    xrt_pose headRef {0,0,0,0, 0,0, 0};
 
     math_quat_from_plus_x_z(&plus_x, &plus_z, &headRef.orientation);
 
@@ -229,11 +230,28 @@ bool get_cam_calib(t_stereo_camera_calibration **calibRef, xrt_pose *head_in_lef
     return true;
 }
 
-void decode_bc4_frame(uint8_t *raw_bc4, uint8_t * dst_l8) {
+void create_frame(const uint8_t *raw_bc4, xrt_frame *&frame) {
+    u_frame_create_one_off(
+        XRT_FORMAT_L8,
+        REQUIRED_WIDTH, // We need 1x1 aspect ratio.
+        REQUIRED_HEIGHT,
+        &frame);
+
+    if (frame == nullptr) {
+        xrt_frame_reference(&frame, nullptr);
+        throw std::runtime_error("Failed to allocate xrt_frame.");
+    }
+
+    if (frame->size != L8_UNCOMPRESSED_SIZE) {
+        xrt_frame_reference(&frame, nullptr);
+        throw std::runtime_error(std::format("Size mismatch: Allocated %zu bytes, expected %zu bytes.", frame->size, BC4_PADDED_SIZE));
+    }
+
+    frame->stereo_format = XRT_STEREO_FORMAT_NONE;
+
     //TODO: BC4-Decode on the GPU.
 
     // BC4 Decompression (It's on the CPU, it's not great, it's fast enough (sometimes)!)
-    memset(dst_l8, 0, REQUIRED_WIDTH * REQUIRED_HEIGHT);
     // Loop through 254 rows of blocks
     for (uint32_t block_y = 0; block_y < IMAGE_HEIGHT/4; block_y++) {
         // Loop through 256 columns of blocks
@@ -248,29 +266,28 @@ void decode_bc4_frame(uint8_t *raw_bc4, uint8_t * dst_l8) {
 
             // Let Monado decode the BC4 Block.
             bcdec_bc4(raw_bc4 + bc4_offset,
-                      dst_l8 + l8_offset,
+                      frame->data + l8_offset,
                       1024);
         }
     }
 
     // Apply Gamma Correction.
     for (size_t i2 = 0; i2 < L8_UNCOMPRESSED_SIZE; i2++)
-        dst_l8[i2] = lut[dst_l8[i2]];
+        frame->data[i2] = lut[frame->data[i2]];
 }
 
-bool get_camera_frames(SharedMemoryData &shared_memory_data, xrt_frame* frames[], uint32_t &latest_timestamp) {
+bool get_camera_frames(SharedMemoryData &shared_memory_data, xrt_frame* frames[], uint32_t &latest_timestamp, uint64_t &frame_time) {
     static std::vector<uint8_t> bc4_left(BC4_DATA_SIZE);
     static std::vector<uint8_t> bc4_right(BC4_DATA_SIZE);
-    static std::vector<uint8_t> l8_left(L8_UNCOMPRESSED_SIZE);
-    static std::vector<uint8_t> l8_right(L8_UNCOMPRESSED_SIZE);
 
     const uint32_t old_timestamp = latest_timestamp;
-    const bool success = copy_latest_image_buffer(
+    const bool success = copy_latest_frame_data(
         shared_memory_data,
         bc4_left.data(),
         bc4_right.data(),
         BC4_DATA_SIZE,
-        latest_timestamp
+        latest_timestamp,
+        frame_time
     );
 
     if (!success) {
@@ -278,37 +295,17 @@ bool get_camera_frames(SharedMemoryData &shared_memory_data, xrt_frame* frames[]
         throw std::runtime_error("Failed to read PSVR2 shared memory in the main loop!");
     }
 
-    std::thread left_thread(decode_bc4_frame, bc4_left.data(), l8_left.data());
-    std::thread right_thread(decode_bc4_frame, bc4_right.data(), l8_right.data());
+    std::thread left_thread(create_frame, bc4_left.data(), std::ref(frames[0]));
+    std::thread right_thread(create_frame, bc4_right.data(), std::ref(frames[1]));
     left_thread.join();
     right_thread.join();
 
-    uint8_t* raw_data[2] = {l8_left.data(), l8_right.data()};
+    if (frames[0] == nullptr || frames[1] == nullptr)
+        throw std::runtime_error("Failed to create xrt_frames!");
 
-    for (int i = 0; i < 2; i++) {
-        u_frame_create_one_off(
-            XRT_FORMAT_L8,
-            REQUIRED_WIDTH, // We need 1x1 aspect ratio.
-            REQUIRED_HEIGHT,
-            &frames[i]);
-
-        if (frames[i] == nullptr) {
-            xrt_frame_reference(&frames[0], nullptr);
-            xrt_frame_reference(&frames[1], nullptr);
-            throw std::runtime_error("Failed to allocate xrt_frame.");
-        }
-
-        if (frames[i]->size != L8_UNCOMPRESSED_SIZE) {
-            xrt_frame_reference(&frames[0], nullptr);
-            xrt_frame_reference(&frames[1], nullptr);
-            throw std::runtime_error(std::format("Size mismatch: Allocated %zu bytes, expected %zu bytes.", frames[i]->size, BC4_PADDED_SIZE));
-        }
-        memcpy(frames[i]->data, raw_data[i], L8_UNCOMPRESSED_SIZE);
-        // memset(frames[i]->data, 0, frames[i]->size);
-
-        frames[i]->timestamp = os_monotonic_get_ns();
-        frames[i]->stereo_format = XRT_STEREO_FORMAT_NONE;
-    }
+    // Set the correct timestamp for the frames.
+    frames[0]->timestamp = frame_time;
+    frames[1]->timestamp = frame_time;
 
     return true;
 }

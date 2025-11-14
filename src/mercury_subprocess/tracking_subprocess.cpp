@@ -26,13 +26,15 @@
 #include "u_subprocess_logging.h"
 #include "tracking_subprocess.h"
 
+#include "ipc.h"
+
 namespace xat = xrt::auxiliary::tracking;
 
 static char* rootpath = nullptr;
 
 bool setup_camera_and_ht(subprocess_state& state) {
     t_stereo_camera_calibration* calib = nullptr;
-    xrt_pose head_in_left{}; // unused???
+    xrt_pose head_in_left{};
 
     if (!get_cam_calib(&calib, &head_in_left, state.shared_memory_data)) return false;
 
@@ -106,8 +108,8 @@ bool check_vrserver_alive(const subprocess_state& state) {
 
 // Errors Codes (Yes they are in the execution order lol)
 // 2 -> Missing / Incorrect args
-// 3 -> Failed to read PSVR2 data.
-// 4 -> Failed Init SteamVR
+// 3 -> Failed Init SteamVR
+// 4 -> Failed to read PSVR2 data.
 // 5 -> WSAStartup Failed
 // 6 -> Socket Failed
 // 7 -> Connection Failed
@@ -116,21 +118,14 @@ int main(int argc, char** argv) {
 
     if (argc < 3) {
         U_SP_LOG_E("Invalid args. Expected at least 3 (App Path, Root Path, Port), got %d.", argc);
-        // return 2;
+        return 2;
     }
+
     subprocess_state state = {};
-
-    try {
-        setup_shared_memory(state.shared_memory_data);
-    } catch (const std::runtime_error& e) {
-        U_SP_LOG_E("Failed to read PSVR2 shared memory! Is PSVR2 turned on?");
-        return 3;
-    }
-
     rootpath = argv[1];
     state.port = argv[2];
     if (argc >= 4) u_sp_log_set_file_path(argv[3]);
-
+    // if (argc >= 4) return 0;
     vr::EVRInitError error;
 
     for (int i = 0; i < 5; i++) {
@@ -143,10 +138,17 @@ int main(int argc, char** argv) {
 
     if (error != vr::VRInitError_None) {
         U_SP_LOG_E("Failed to initialize VR Subsystem after 5 attempts, aborting!");
+        return 3;
+    }
+
+    try {
+        setup_shared_memory(state.shared_memory_data);
+    } catch (const std::runtime_error& e) {
+        U_SP_LOG_E("Failed to read PSVR2 shared memory! Is PSVR2 turned on?");
         return 4;
     }
 
-    // if (const int i = connect_to_driver(state) != 0) return i;
+    if (const int i = connect_to_driver(state) != 0) return i;
 
     void* sdl2_hack;
     setup_debug(state, sdl2_hack);
@@ -155,29 +157,28 @@ int main(int argc, char** argv) {
     // We setup the cam cal for PSVR2.
     setup_camera_and_ht(state);
 
-
     uint32_t latest_timestamp = 0;
     while (state.running) {
         if (!check_vrserver_alive(state)) break;
 
         xrt_frame* frames[2] = {nullptr, nullptr};
-        char const* failure_reason = nullptr;
+        const float time_now = static_cast<float>(os_monotonic_get_ns());
+        uint64_t frame_time = os_monotonic_get_ns();
+        std::string failure_reason = "unknown reason";
         try {
             // We skip the same frames.
-            if (!get_camera_frames(state.shared_memory_data, frames, latest_timestamp)) continue;
+            if (!get_camera_frames(state.shared_memory_data, frames, latest_timestamp, frame_time)) continue;
         } catch (const std::runtime_error& e) {
             failure_reason = e.what();
         }
 
+        const float time_diff = static_cast<float>(frame_time) - time_now;
+        const float time_diff_s = time_diff / static_cast<float>(U_TIME_1S_IN_NS);
         vr::TrackedDevicePose_t hmd_pose{};
-
-        // We don't compensate for the frame delay, as we don't really have a time the frame arrives,
-        // if we process stuff, we expect it to be "from this instant".
-        // TODO: Verify we can just do that
         state.vr_system->GetDeviceToAbsoluteTrackingPose(
-            vr::ETrackingUniverseOrigin::TrackingUniverseRawAndUncalibrated, 0, &hmd_pose, 1);
+            vr::ETrackingUniverseOrigin::TrackingUniverseRawAndUncalibrated, time_diff_s, &hmd_pose, 1);
 
-        // xrt_pose attached_hmd_pose = GetPose(hmd_pose.mDeviceToAbsoluteTracking);
+        xrt_pose attached_hmd_pose = GetPose(hmd_pose.mDeviceToAbsoluteTracking);
 
         xrt_hand_joint_set hands[2];
         int64_t out_timestamp;
@@ -194,24 +195,24 @@ int main(int argc, char** argv) {
 
         //TODO: Rework IPC system. Probably use shared memory like PSVR2 Driver does, would make more sense than this.
 
-        // tracking_message message = {};
-        //
-        // message.size = TMSIZE;
-        // message.camera_timestamp = static_cast<int64_t>(time_camera);
-        // message.host_recieved_frame_timestamp = static_cast<int64_t>(time_now_uint);
-        //
-        // hjs2_to_tracking_message(state, hands, attached_hmd_pose, message, static_cast<int64_t>(time_camera));
-        //
-        // // Send data to the parent process
-        // message.sent_at_timestamp = os_monotonic_get_ns();
-        //
-        // iResult = send(state.connectSocket, reinterpret_cast<const char*>(&message), TMSIZE, 0);
-        //
-        // if (iResult == SOCKET_ERROR) {
-        //     // WSAECONNABORTED = 10053 winerror.h
-        //     U_SP_LOG_E("Error sending data: %d", WSAGetLastError());
-        //     break;
-        // }
+        tracking_message message = {};
+
+        message.size = TMSIZE;
+        message.camera_timestamp = frame_time;
+        message.host_recieved_frame_timestamp = time_now;
+
+        hjs2_to_tracking_message(state, hands, attached_hmd_pose, message, frame_time);
+
+        // Send data to the parent process
+        message.sent_at_timestamp = os_monotonic_get_ns();
+
+        int result = send(state.connectSocket, reinterpret_cast<const char*>(&message), TMSIZE, 0);
+
+        if (result == SOCKET_ERROR) {
+            // WSAECONNABORTED = 10053 winerror.h
+            U_SP_LOG_E("Error sending data: %d", WSAGetLastError());
+            break;
+        }
     }
 
     U_SP_LOG_I("Shutting down cleanly!");
@@ -221,8 +222,8 @@ int main(int argc, char** argv) {
     vr::VR_Shutdown();
 
     // Close the socket and cleanup Winsock
-    // closesocket(state.connectSocket);
-    // WSACleanup();
+    closesocket(state.connectSocket);
+    WSACleanup();
     oxr_sdl2_hack_stop(&sdl2_hack);
 
     return 0;

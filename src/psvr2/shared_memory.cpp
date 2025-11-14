@@ -1,14 +1,17 @@
 #include "shared_memory.h"
 #include <iostream>
+#include "math/m_api.h"
 
 // Modified from PSVR2-Camera project. Credits: Supremium
 
 const char* FILE_MAPPING_NAME = "SHARE_VRT2_WIN";
-const DWORD SHARED_MEM_SIZE = 0x2000000; // 32MB
 const char* EVENT_NAME = "SHARE_VRT2_WIN_IMAGE_EVT";
 const char* MUTEX_NAME = "SHARE_VRT2_WIN_IMAGE_MTX";
-const DWORD IMAGE_BUFFER_OFFSET = 0x10ba00 + 256;
-const size_t PER_CAMERA_BUFFER_STRIDE = 0x200100;
+constexpr DWORD SHARED_MEM_SIZE = 0x2000000; // 32MB
+constexpr DWORD IMAGE_BUFFER_OFFSET = 0x10ba00 + 256;
+constexpr size_t PER_CAMERA_BUFFER_STRIDE = 0x200100;
+constexpr size_t POSE_DATA_OFFSET = 0x3C10;
+constexpr size_t POST_DATA_INDEX_OFFSET = 0x878;
 
 #pragma pack(push, 1)
 struct CameraConfig {
@@ -111,7 +114,14 @@ bool get_distortion_config(SharedMemoryData& data, int cameraId, CameraParameter
     return true;
 }
 
-bool copy_latest_image_buffer(SharedMemoryData& data, void* leftCameraData, void* rightCameraData, size_t cameraDataSize, uint32_t &timestamp) {
+bool copy_latest_frame_data(
+    SharedMemoryData& data,
+    void* leftCameraData,
+    void* rightCameraData,
+    size_t cameraDataSize,
+    uint32_t &timestamp,
+    uint64_t &frame_time
+) {
     if (WaitForSingleObject(data.hImageEvent, INFINITE) != WAIT_OBJECT_0) return false;
     if (WaitForSingleObject(data.hImageMutex, INFINITE) != WAIT_OBJECT_0) return false;
 
@@ -158,13 +168,63 @@ bool copy_latest_image_buffer(SharedMemoryData& data, void* leftCameraData, void
         return false;
     }
 
+    // I found this myself!!!!!!!!!!!!
+    // (This is soo small achievement, but it's my First RE of anything other than Java, so I'm happy!)
+    frame_time = *reinterpret_cast<uint64_t*>(data.imageMemBase + IMAGE_BUFFER_OFFSET + (PER_CAMERA_BUFFER_STRIDE * latestIndex)-8);
+    timestamp = latestTimestamp;
+
     const char* data_ptr = data.imageMemBase + IMAGE_BUFFER_OFFSET + (PER_CAMERA_BUFFER_STRIDE * latestIndex);
     memcpy(leftCameraData, data_ptr, cameraDataSize);
     memcpy(rightCameraData, data_ptr + cameraDataSize, cameraDataSize);
 
-    if (!ReleaseMutex(data.hImageMutex)) return false;
+    // const size_t pose_offset = POSE_DATA_OFFSET + (POST_DATA_INDEX_OFFSET * latestIndex);
+    // const auto pose_data_ptr = reinterpret_cast<const float*>(
+    //     reinterpret_cast<const char*>(data.imageMemBase) + pose_offset
+    // );
+    //
+    // float pose_floats[64];
+    // std::memcpy(pose_floats, pose_data_ptr, sizeof(pose_floats));
+    //
+    // const xrt_vec3 p_base = {
+    //     .x = pose_floats[3],
+    //     .y = pose_floats[4],
+    //     .z = pose_floats[5],
+    // };
+    //
+    // const xrt_vec3 p_offset_vec = {
+    //     .x = pose_floats[10],
+    //     .y = pose_floats[11],
+    //     .z = pose_floats[12],
+    // };
+    //
+    // const xrt_quat r_q = {
+    //     .x = pose_floats[6],
+    //     .y = pose_floats[7],
+    //     .z = pose_floats[8],
+    //     .w = pose_floats[9],
+    // };
+    //
+    // const xrt_quat o_q = {
+    //     .x = pose_floats[13],
+    //     .y = pose_floats[14],
+    //     .z = pose_floats[15],
+    //     .w = pose_floats[16],
+    // };
+    //
+    // xrt_quat final_rotation;
+    // xrt_vec3 p_rotated_offset;
+    // xrt_vec3 final_position = p_base;
+    //
+    // math_quat_rotate(&r_q, &o_q, &final_rotation);
+    // math_quat_rotate_vec3(&final_rotation, &p_offset_vec, &p_rotated_offset);
+    // math_vec3_accum(&p_rotated_offset, &final_position);
+    //
+    // final_position.z *= -1.0f;
+    //
+    // out_pose->position = final_position;
+    // out_pose->orientation = final_rotation;
 
-    timestamp = latestTimestamp;
+    if (!ReleaseMutex(data.hImageMutex)) return false;
 
     return true;
 }

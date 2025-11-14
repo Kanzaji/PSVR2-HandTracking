@@ -1,8 +1,8 @@
 #pragma once
 
 #include "distortion.h"
-
 #include <windows.h>
+#include "xrt/xrt_defines.h"
 
 struct SharedMemoryData {
     HANDLE hMapFile = nullptr;
@@ -20,4 +20,4 @@ bool get_distortion_config(SharedMemoryData& data, int cameraId, CameraParameter
 
 // Waits for a new frame, finds the latest image buffer, and copies it to the destination.
 // Returns true on success, false on failure.
-bool copy_latest_image_buffer(SharedMemoryData& data, void* leftCameraData, void* rightCameraData, size_t cameraDataSize, uint32_t &timestamp);
+bool copy_latest_frame_data(SharedMemoryData& data, void* leftCameraData, void* rightCameraData, size_t cameraDataSize, uint32_t &timestamp, uint64_t &frame_time);
