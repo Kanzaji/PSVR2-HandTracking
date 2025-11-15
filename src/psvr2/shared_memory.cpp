@@ -170,7 +170,7 @@ bool copy_latest_frame_data(
 
     // I found this myself!!!!!!!!!!!!
     // (This is soo small achievement, but it's my First RE of anything other than Java, so I'm happy!)
-    frame_time = *reinterpret_cast<uint64_t*>(data.imageMemBase + IMAGE_BUFFER_OFFSET + (PER_CAMERA_BUFFER_STRIDE * latestIndex)-8);
+    frame_time = *reinterpret_cast<uint64_t*>(data.imageMemBase + IMAGE_BUFFER_OFFSET + (PER_CAMERA_BUFFER_STRIDE * latestIndex)-8) * 1000;
     timestamp = latestTimestamp;
 
     const char* data_ptr = data.imageMemBase + IMAGE_BUFFER_OFFSET + (PER_CAMERA_BUFFER_STRIDE * latestIndex);

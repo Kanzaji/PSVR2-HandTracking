@@ -258,7 +258,6 @@ void create_frame(const uint8_t *raw_bc4, xrt_frame *&frame) {
     }
 
     frame->stereo_format = XRT_STEREO_FORMAT_NONE;
-    frame->timestamp = os_monotonic_get_ns();
     frame->stride = 1024;
 
     for (uint32_t block_y = 0; block_y < IMAGE_HEIGHT/4; block_y++) {
@@ -310,9 +309,8 @@ bool get_camera_frames(SharedMemoryData &shared_memory_data, xrt_frame* frames[]
         throw std::runtime_error("Failed to create xrt_frames!");
 
     // Set the correct timestamp for the frames.
-    //Note: setting timestamp to the frame time from the buffer makes it break?
-    frames[0]->source_timestamp = static_cast<int64_t>(frame_time);
-    frames[1]->source_timestamp = static_cast<int64_t>(frame_time);
+    frames[0]->timestamp = static_cast<int64_t>(frame_time);
+    frames[1]->timestamp = static_cast<int64_t>(frame_time);
 
     return true;
 }
