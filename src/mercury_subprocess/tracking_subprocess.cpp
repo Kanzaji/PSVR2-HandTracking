@@ -141,6 +141,8 @@ int main(int argc, char** argv) {
         return 3;
     }
 
+    os_nanosleep(U_TIME_1S_IN_NS);
+
     try {
         setup_shared_memory(state.shared_memory_data);
     } catch (const std::runtime_error& e) {
