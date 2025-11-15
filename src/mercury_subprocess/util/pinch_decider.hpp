@@ -8,13 +8,13 @@ decide(xrt_vec3 one, xrt_vec3 two, bool* out) {
     float dist = m_vec3_len(one - two);
     // These used to be 0.02f and 0.04f, but I bumped them way up to compensate for bad tracking. Once our tracking
     // is better, bump these back down.
-    float activation_dist = 0.02f;
-    float deactivation_dist = 0.04f;
+    float activation_dist = 0.03f;
+    float deactivation_dist = 0.06f;
 
 
     debounce(dist, activation_dist, deactivation_dist, out);
 
-    U_SP_LOG_E("Decision! %f %d", dist, *out);
+    // U_SP_LOG_E("Decision! %f %d", dist, *out);
 }
 
 static void trigger_decide(struct xrt_hand_joint_set& joint_set, bool* out) {

@@ -176,7 +176,7 @@ int main(int argc, char** argv) {
         const float time_diff_s = time_diff / static_cast<float>(U_TIME_1S_IN_NS);
         vr::TrackedDevicePose_t hmd_pose{};
         state.vr_system->GetDeviceToAbsoluteTrackingPose(
-            vr::ETrackingUniverseOrigin::TrackingUniverseRawAndUncalibrated, time_diff_s, &hmd_pose, 1);
+            vr::ETrackingUniverseOrigin::TrackingUniverseRawAndUncalibrated, 0, &hmd_pose, 1);
 
         xrt_pose attached_hmd_pose = GetPose(hmd_pose.mDeviceToAbsoluteTracking);
 

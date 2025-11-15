@@ -226,7 +226,7 @@ void curls(everything_else_decider& dec, int hand_idx) {
         hand[i] = dec.base.hands[hand_idx].fingers_relative[i];
     }
 
-    std::array<float, 5> curls;
+    std::array<float, 5> curls{};
     hand_curls(hand, curls);
 
     for (int i = 0; i < 5; i++) {
@@ -335,8 +335,9 @@ void decide_everything_else(tracking_message& msg, xrt_pose head, bool& grip_ins
                         dec.base.hands[1].bs.thumbstick_gesture);
     }
 
-    system_button(dec);
-    swap_grip_instead_of_aim(dec);
+    //TODO: Better Predictions those are terrible. Or make tracking better?
+    // system_button(dec);
+    // swap_grip_instead_of_aim(dec);
 
     // U_SP_LOG_I("%f", quat_difference(dec.hands_head_local[0].orientation, up_pose));
     // U_SP_LOG_I("%f", quat_difference(up_pose_2, up_pose));

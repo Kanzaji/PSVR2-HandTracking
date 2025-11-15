@@ -6,6 +6,7 @@
 #include "util/u_frame.h"
 #include <vector>
 //#include <Eigen/src/Core/Matrix.h>
+#include "../util/u_subprocess_logging.h"
 #include "tinyceres/tiny_solver.hpp"
 #include "tinyceres/tiny_solver_autodiff_function.hpp"
 
@@ -122,7 +123,7 @@ bool get_cam_calib(t_stereo_camera_calibration **calibRef, xrt_pose *head_in_lef
         CameraIntrinsics camIntrinsics{};
         CameraParameters camParams{};
 
-        if ( !get_distortion_config(shared_memory_data, i, camParams, camIntrinsics)) {
+        if (!get_distortion_config(shared_memory_data, i, camParams, camIntrinsics)) {
             return false;
         }
 
@@ -193,10 +194,19 @@ bool get_cam_calib(t_stereo_camera_calibration **calibRef, xrt_pose *head_in_lef
 
         //TODO: Curve-fit PSVR2 to this.
         // Currently taken from https://gitlab.freedesktop.org/Beyley/monado/-/blob/dev-psvr2/src/xrt/drivers/psvr2/psvr2.c?ref_type=heads
-        //camCalib.kb4.k1 = 0.027694760153821763;
-        //camCalib.kb4.k2 = -0.015417764941581483;
-        //camCalib.kb4.k3 = 0.0068598424886571066;
-        //camCalib.kb4.k4 = -0.00171888994824757;
+        // camCalib.kb4.k1 = 0.027694760153821763;
+        // camCalib.kb4.k2 = -0.015417764941581483;
+        // camCalib.kb4.k3 = 0.0068598424886571066;
+        // camCalib.kb4.k4 = -0.00171888994824757;
+
+        U_SP_LOG_I("Calculated KB4.K1 %f", kb4_distort_params[0]);
+        U_SP_LOG_I("Calculated KB4.K2 %f", kb4_distort_params[1]);
+        U_SP_LOG_I("Calculated KB4.K3 %f", kb4_distort_params[2]);
+        U_SP_LOG_I("Calculated KB4.K4 %f", kb4_distort_params[3]);
+        U_SP_LOG_I("Beyley-Pre KB4.K1 %f", 0.027694760153821763);
+        U_SP_LOG_I("Beyley-Pre KB4.K2 %f", -0.015417764941581483);
+        U_SP_LOG_I("Beyley-Pre KB4.K3 %f", 0.0068598424886571066);
+        U_SP_LOG_I("Beyley-Pre KB4.K4 %f", -0.00171888994824757);
 
         calib->view[i] = camCalib;
     }
@@ -215,7 +225,7 @@ bool get_cam_calib(t_stereo_camera_calibration **calibRef, xrt_pose *head_in_lef
     // plus_x 0 0 0 plus_z 0 0 0 and headRef 0 0 0 0 0 0 makes hands show up too high in front of the HMD.
     xrt_vec3 plus_x {0,0,0};
     xrt_vec3 plus_z {0,0,0};
-    xrt_pose headRef {0,0,0,0, 0,0, 0};
+    xrt_pose headRef {0,0,0,0, -0.1,-0.5, 0.05};
 
     math_quat_from_plus_x_z(&plus_x, &plus_z, &headRef.orientation);
 
@@ -248,13 +258,10 @@ void create_frame(const uint8_t *raw_bc4, xrt_frame *&frame) {
     }
 
     frame->stereo_format = XRT_STEREO_FORMAT_NONE;
+    frame->timestamp = os_monotonic_get_ns();
+    frame->stride = 1024;
 
-    //TODO: BC4-Decode on the GPU.
-
-    // BC4 Decompression (It's on the CPU, it's not great, it's fast enough (sometimes)!)
-    // Loop through 254 rows of blocks
     for (uint32_t block_y = 0; block_y < IMAGE_HEIGHT/4; block_y++) {
-        // Loop through 256 columns of blocks
         for (uint32_t block_x = 0; block_x < IMAGE_WIDTH/4; block_x++) {
             const size_t bc4_offset = (block_y * (REQUIRED_WIDTH/4) + block_x) * BCDEC_BC4_BLOCK_SIZE;
 
@@ -264,7 +271,6 @@ void create_frame(const uint8_t *raw_bc4, xrt_frame *&frame) {
             // X position: block_x * 4 columns
             const size_t l8_offset = (block_y * 4 * 1024) + (block_x * 4);
 
-            // Let Monado decode the BC4 Block.
             bcdec_bc4(raw_bc4 + bc4_offset,
                       frame->data + l8_offset,
                       1024);
@@ -304,8 +310,9 @@ bool get_camera_frames(SharedMemoryData &shared_memory_data, xrt_frame* frames[]
         throw std::runtime_error("Failed to create xrt_frames!");
 
     // Set the correct timestamp for the frames.
-    frames[0]->timestamp = frame_time;
-    frames[1]->timestamp = frame_time;
+    //Note: setting timestamp to the frame time from the buffer makes it break?
+    frames[0]->source_timestamp = static_cast<int64_t>(frame_time);
+    frames[1]->source_timestamp = static_cast<int64_t>(frame_time);
 
     return true;
 }
