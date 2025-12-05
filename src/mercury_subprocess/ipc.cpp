@@ -161,7 +161,7 @@ void hjs2_to_tracking_message(subprocess_state& state, xrt_hand_joint_set sets[2
             msg.hands[hand_idx].fingers_relative[i] = tmp.pose;
         }
     }
-    decide_everything_else(msg, attached_head, state.grip_instead_of_aim);
+    // decide_everything_else(msg, attached_head, state.grip_instead_of_aim);
     state.bs[0] = msg.hands[0].bs;
     state.bs[1] = msg.hands[1].bs;
 }
