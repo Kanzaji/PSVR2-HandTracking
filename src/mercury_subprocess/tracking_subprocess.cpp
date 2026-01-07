@@ -164,7 +164,7 @@ int main(int argc, char** argv) {
         if (!check_vrserver_alive(state)) break;
 
         xrt_frame* frames[2] = {nullptr, nullptr};
-        const float time_now = static_cast<float>(os_monotonic_get_ns());
+        const auto time_now = static_cast<float>(os_monotonic_get_ns());
         uint64_t frame_time = os_monotonic_get_ns();
         std::string failure_reason = "unknown reason";
         try {
@@ -196,6 +196,7 @@ int main(int argc, char** argv) {
         }
 
         //TODO: Rework IPC system. Probably use shared memory like PSVR2 Driver does, would make more sense than this.
+        // Honestly I'm willing to just, well, put this into the same dll as the driver and run on separate thread? No idea why this has to be a subprocess.
 
         tracking_message message = {};
 

@@ -178,11 +178,11 @@ vr::EVRInitError DeviceProvider::Init(vr::IVRDriverContext* pDriverContext) {
     // #define M_EURO_FILTER_HEAD_TRACKING_FCMIN_D 25.0
     // #define M_EURO_FILTER_HEAD_TRACKING_BETA 0.6
 
-    // m_filter_euro_f32_init(&delay_filter_, 3.14, 1, 0.16);
+    m_filter_euro_f32_init(&delay_filter_, 3.14, 1, 0.16);
     // m_filter_euro_f32_init(&delay_filter_, 30*500000, 25*500000, 0.6);
     // m_filter_euro_f32_init(&delay_filter_, 0.00000001, 0.00000001, 0.01);
     // m_filter_euro_f32_init(&delay_filter_, 0.00000001, 0.00000001, 0.0001);
-    m_filter_euro_f32_init(&delay_filter_, 0.000000001, 0.000000001, 0.0001);
+    // m_filter_euro_f32_init(&delay_filter_, 0.000000001, 0.000000001, 0.0001);
 
     is_active_ = true;
     hand_tracking_thread_ = std::thread(&DeviceProvider::HandTrackingThread, this);

@@ -29,6 +29,10 @@ target_link_libraries(tracking_subprocess PRIVATE
         tracking_subprocess_protocol
 )
 
+# No idea why this is now necessary, it compiled fine without this earlier, now it doesn't?
+# I swear I hate either Monado Dev Env or CMake, whichever makes this fuck itself up every single time I try to work on this project.
+target_include_directories(tracking_subprocess PRIVATE ${ONNXRuntime_INCLUDE_DIR})
+
 set_target_properties(tracking_subprocess PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/mercury/bin/win64")
 
 # Debug Hack

@@ -64,8 +64,8 @@ void create_undistortion_mesh(
     const CameraParameters& params,
     std::vector<UndistortVertex>& outVertices,
     std::vector<DWORD>& outIndices,
-    DWORD meshDensityX,
-    DWORD meshDensityY)
+    DWORD meshDensityX, // 256
+    DWORD meshDensityY) // 256
 {
     outVertices.clear();
     outIndices.clear();
