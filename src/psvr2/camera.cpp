@@ -193,21 +193,35 @@ bool get_cam_calib(t_stereo_camera_calibration **calibRef, xrt_pose *head_in_lef
         calib->view[i] = camCalib;
     }
 
-    constexpr float D2R = M_PI / 180.0f;
-    xrt_quat camera_rot_quat = {};
-    xrt_matrix_3x3 camera_rot_matrix = {};
-    math_quat_from_euler_angles(
-        new xrt_vec3 {
-            1.5 * D2R,
-            -15.3 * D2R * 2 /* Because it expects an angle difference between the two cameras?*/,
-            0},
-        &camera_rot_quat);
-    math_matrix_3x3_from_quat(&camera_rot_quat, &camera_rot_matrix);
+    // Left Camera pos from ROOT
+    // Relative Pos: -0,055, 0,02589577, 0,02127628
+    // Relative Quat: 0,1294095, -0,1294096, -0,01703709, 0,9829631
+
+    // Right Camera pos from ROOT
+    // Relative Pos: 0,0239805, 0,02589577, 0,02127628
+    // Relative Quat: 0,1288261, 0,1328437, 0,01347646, 0,9826367
+
+    // Right Cam to Left Cam pos (Right camera 0 0 0 -> Left Camera \/)
+    // Relative Pos: -0,0761642, -0,0006115109, -0,02089401
+    // Relative Quat: 0,001050473, -0,2616819, 0,003874446, 0,965146
+
+    // Left Cam to Right Cam pos (Left camera 0 0 0 -> Right Camera \/)
+    // Relative Pos: 0,0762893, 3,49246E-10, -0,02044167
+    // Relative Quat: -0,001050473, 0,2616819, -0,003874446, 0,965146
+
+    // Those are unity values, require conversions:
+    // Position: Flip the Z axis. (x,y,z)→(x,y,−z).
+    // Rotation (Quaternion): Mirroring the Z axis in a quaternion flip requires flipping X and Y (or Z and W). The standard transform is: (x,y,z,w)→(−x,−y,z,w)
+
     // double rotation[] = {0.86355550243947854, 0.010547271209912352, -0.50414348084302774,
     //                        -0.00939867939933695, 0.99994421054605376, 0.0048208527230875218,
     //                        0.50416620179465443, 0.000575209052236814, 0.863606455570185};
     // Also a difference between left and right eye?
     // double translation[] = {-0.0767532932298818, 0.00043681802400829, -0.020487561118237737};
+
+    xrt_quat camera_rot_quat = {0.001050473, -0.2616819, -0.003874446, 0.965146};
+    xrt_matrix_3x3 camera_rot_matrix = {};
+    math_matrix_3x3_from_quat(&camera_rot_quat, &camera_rot_matrix);
     double rotation[] = {
         camera_rot_matrix.v[0],
         camera_rot_matrix.v[1],
@@ -219,7 +233,7 @@ bool get_cam_calib(t_stereo_camera_calibration **calibRef, xrt_pose *head_in_lef
         camera_rot_matrix.v[7],
         camera_rot_matrix.v[8]
     };
-    double translation[] = {-0.03515*2, -0.0010458, 0.0119543};
+    double translation[] = {-0.0761642, -0.0006115109, 0.02089401};
     memcpy(calib->camera_rotation, rotation, sizeof(rotation));
     memcpy(calib->camera_translation, translation, sizeof(translation));
 
@@ -233,28 +247,10 @@ bool get_cam_calib(t_stereo_camera_calibration **calibRef, xrt_pose *head_in_lef
     // -x -> Left from the HMD
     // xrt_pose headRef {0,0,0,0, -0.15,-0.5, -0.15};
 
-    xrt_pose headRef {};
-
-    constexpr float CAMERA_REL_X = 0.03515f;
-    constexpr float CAMERA_REL_Y = 0.0010458f;
-    constexpr float CAMERA_REL_Z = -0.0119543f;
-
-    constexpr float HMD_ROOT_Y = 0.04f;
-    constexpr float HMD_PITCH_DEG = 14.0f;
-
-    xrt_quat rot_hmd; // R_HMD (14 degree tilt)
-    xrt_quat rot_cam; // R_Camera (1.5 pitch, -15.3 yaw)
-
-    math_quat_from_euler_angles(new xrt_vec3 {HMD_PITCH_DEG * D2R, 0.0f, 0.0f}, &rot_hmd);
-
-    math_quat_from_euler_angles(new xrt_vec3 {1.5f * D2R, 15.3f * D2R, 0.0f}, &rot_cam);
-
-    math_quat_rotate(&rot_hmd, &rot_cam, &headRef.orientation);
-
-    //TODO: Figure out exactly if this is correct. I still had to add manual offsets to make the hands appear somewhat in correct place. But it's not really accurate.
-    headRef.position.x = CAMERA_REL_X - 0.015;
-    headRef.position.y = -(HMD_ROOT_Y + CAMERA_REL_Y) - 0.025; // Offset added manually as hands are too high.
-    headRef.position.z = CAMERA_REL_Z;
+    xrt_pose headRef {
+        -0.1294095, 0.1294096, -0.01703709, 0.9829631,
+        -0.055, 0.02589577, -0.02127628 // Pos y is still not low enough, this might be an issue with IPC
+    };
 
     math_pose_invert(&headRef, head_in_left);
 
