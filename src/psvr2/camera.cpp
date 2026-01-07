@@ -143,7 +143,6 @@ bool get_cam_calib(t_stereo_camera_calibration **calibRef, xrt_pose *head_in_lef
 
         TargetPoint xy[STEPS * STEPS];
 
-        // 1. Calculate the Normalized Undistorted Viewplane Boundaries
         // The min/max normalized coordinates that map to the image edges (0 to W-1/H-1).
         const double X_MIN = (0.0 - camIntrinsics.cx) / camIntrinsics.fx;
         const double X_MAX = (1024 - 1.0 - camIntrinsics.cx) / camIntrinsics.fx;
@@ -153,27 +152,19 @@ bool get_cam_calib(t_stereo_camera_calibration **calibRef, xrt_pose *head_in_lef
         const double X_RANGE = X_MAX - X_MIN;
         const double Y_RANGE = Y_MAX - Y_MIN;
 
-        /* Calculate distortion grid by iterating over the UNDISTORTED viewplane */
         for (int y_index = 0; y_index < STEPS; y_index++) {
             for (int x_index = 0; x_index < STEPS; x_index++) {
 
-                // 2. Generate the Undistorted Normalized Coordinate (p->point)
-                // Linearly interpolate between X_MIN/Y_MIN and X_MAX/Y_MAX
                 double norm_x = X_MIN + (x_index / static_cast<double>((STEPS - 1))) * X_RANGE;
                 double norm_y = Y_MIN + (y_index / static_cast<double>((STEPS - 1))) * Y_RANGE;
 
                 TargetPoint *p = &xy[(y_index * STEPS) + x_index];
 
-                // Store the undistorted normalized point (Input for KB4)
                 p->point[0] = norm_x;
                 p->point[1] = norm_y;
 
-                // 3. Calculate the Distorted Normalized Coordinate (using the PSVR2 model)
-                // We use a zoom factor of 1.0 as we are calculating the core distortion curve
                 DirectX::XMFLOAT2 distorted_norm = get_distorted_point(norm_x * 1.0, norm_y * 1.0, camParams);
 
-                // 4. Convert the Distorted Normalized Coordinate to Distorted Pixel (p->distorted)
-                // This is the ground truth target for the KB4 fit
                 p->distorted[0] = distorted_norm.x * camIntrinsics.fx + camIntrinsics.cx;
                 p->distorted[1] = distorted_norm.y * camIntrinsics.fy + camIntrinsics.cy;
             }
@@ -193,21 +184,11 @@ bool get_cam_calib(t_stereo_camera_calibration **calibRef, xrt_pose *head_in_lef
         camCalib.kb4.k3 = kb4_distort_params[2];
         camCalib.kb4.k4 = kb4_distort_params[3];
 
-        //TODO: Curve-fit PSVR2 to this.
-        // Currently taken from https://gitlab.freedesktop.org/Beyley/monado/-/blob/dev-psvr2/src/xrt/drivers/psvr2/psvr2.c?ref_type=heads
-        // camCalib.kb4.k1 = 0.027694760153821763;
-        // camCalib.kb4.k2 = -0.015417764941581483;
-        // camCalib.kb4.k3 = 0.0068598424886571066;
-        // camCalib.kb4.k4 = -0.00171888994824757;
-
-        U_SP_LOG_I("Calculated KB4.K1 %f", kb4_distort_params[0]);
-        U_SP_LOG_I("Calculated KB4.K2 %f", kb4_distort_params[1]);
-        U_SP_LOG_I("Calculated KB4.K3 %f", kb4_distort_params[2]);
-        U_SP_LOG_I("Calculated KB4.K4 %f", kb4_distort_params[3]);
-        U_SP_LOG_I("Beyley-Pre KB4.K1 %f", 0.027694760153821763);
-        U_SP_LOG_I("Beyley-Pre KB4.K2 %f", -0.015417764941581483);
-        U_SP_LOG_I("Beyley-Pre KB4.K3 %f", 0.0068598424886571066);
-        U_SP_LOG_I("Beyley-Pre KB4.K4 %f", -0.00171888994824757);
+        U_SP_LOG_I("Curve-Fitting values for KB4 Distortion, Camera %d", i);
+        U_SP_LOG_I("KB4.K1 => %f", kb4_distort_params[0]);
+        U_SP_LOG_I("KB4.K2 => %f", kb4_distort_params[1]);
+        U_SP_LOG_I("KB4.K3 => %f", kb4_distort_params[2]);
+        U_SP_LOG_I("KB4.K4 => %f", kb4_distort_params[3]);
 
         calib->view[i] = camCalib;
     }
@@ -241,15 +222,6 @@ bool get_cam_calib(t_stereo_camera_calibration **calibRef, xrt_pose *head_in_lef
     double translation[] = {-0.03515*2, -0.0010458, 0.0119543};
     memcpy(calib->camera_rotation, rotation, sizeof(rotation));
     memcpy(calib->camera_translation, translation, sizeof(translation));
-
-    U_SP_LOG_I("Camera calibration matrix calculated:");
-    U_SP_LOG_I(((std::format("{} {} {}", camera_rot_matrix.v[0], camera_rot_matrix.v[1], camera_rot_matrix.v[2])).c_str()));
-    U_SP_LOG_I(((std::format("{} {} {}", camera_rot_matrix.v[3], camera_rot_matrix.v[4], camera_rot_matrix.v[5])).c_str()));
-    U_SP_LOG_I(((std::format("{} {} {}", camera_rot_matrix.v[6], camera_rot_matrix.v[7], camera_rot_matrix.v[8])).c_str()));
-    U_SP_LOG_I("Camera calibration matrix bayley:");
-    U_SP_LOG_I("0.86355550243947854 0.010547271209912352 -0.50414348084302774");
-    U_SP_LOG_I("-0.00939867939933695 0.99994421054605376  0.0048208527230875218");
-    U_SP_LOG_I("0.50416620179465443  0.000575209052236814 0.863606455570185");
 
     //TODO: Find a proper HeadRef for PSVR2.
     // plus_x 0 0 0 plus_z 0 0 0 and headRef 0 0 0 0 0 0 makes hands show up too high in front of the HMD.
