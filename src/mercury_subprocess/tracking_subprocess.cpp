@@ -1,3 +1,4 @@
+#include "xrt/xrt_defines.h"
 #pragma comment(lib, "ws2_32.lib")
 
 // Monado
@@ -167,9 +168,10 @@ int main(int argc, char** argv) {
         const auto time_now = static_cast<float>(os_monotonic_get_ns());
         uint64_t frame_time = os_monotonic_get_ns();
         std::string failure_reason = "unknown reason";
+        xrt_pose cam_pose;
         try {
             // We skip the same frames.
-            if (!get_camera_frames(state.shared_memory_data, frames, latest_timestamp, frame_time)) continue;
+            if (!get_camera_frames(state.shared_memory_data, frames, latest_timestamp, frame_time, &cam_pose)) continue;
         } catch (const std::runtime_error& e) {
             failure_reason = e.what();
         }
@@ -180,12 +182,17 @@ int main(int argc, char** argv) {
         state.vr_system->GetDeviceToAbsoluteTrackingPose(
             vr::ETrackingUniverseOrigin::TrackingUniverseRawAndUncalibrated, time_diff_s, &hmd_pose, 1);
 
-        xrt_pose attached_hmd_pose = GetPose(hmd_pose.mDeviceToAbsoluteTracking);
+       
+        // U_SP_LOG_I("camera pose vs hmd pose:");
+        // U_SP_LOG_I("  cam pos: %f %f %f", cam_pose.position.x, cam_pose.position.y, cam_pose.position.z);
+        // U_SP_LOG_I("  cam rot: %f %f %f %f", cam_pose.orientation.w, cam_pose.orientation.x, cam_pose.orientation.y, cam_pose.orientation.z);
+        // U_SP_LOG_I("  hmd pos: %f %f %f", attached_hmd_pose.position.x, attached_hmd_pose.position.y, attached_hmd_pose.position.z);
+        // U_SP_LOG_I("  hmd rot: %f %f %f %f", attached_hmd_pose.orientation.w, attached_hmd_pose.orientation.x, attached_hmd_pose.orientation.y, attached_hmd_pose.orientation.z);
 
         xrt_hand_joint_set hands[2];
         int64_t out_timestamp;
         if (frames[0] == nullptr || frames[1] == nullptr) {
-            U_SP_LOG_E("Failed creating frames for Mercury. Skipping iteration. Reason: %s", failure_reason);
+            U_SP_LOG_E("Failed creating frames for Mercury. Skipping iteration. Reason: %s", failure_reason.c_str());
             continue;
         }
         t_ht_sync_process(state.sync, frames[0], frames[1], &hands[0], &hands[1], &out_timestamp);
@@ -204,7 +211,7 @@ int main(int argc, char** argv) {
         message.camera_timestamp = frame_time;
         message.host_recieved_frame_timestamp = time_now;
 
-        hjs2_to_tracking_message(state, hands, attached_hmd_pose, message, frame_time);
+        hjs2_to_tracking_message(state, hands, cam_pose, message, frame_time);
 
         // Send data to the parent process
         message.sent_at_timestamp = os_monotonic_get_ns();

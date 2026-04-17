@@ -1,6 +1,7 @@
 #include "shared_memory.h"
 #include <iostream>
 #include "math/m_api.h"
+#include "xrt/xrt_defines.h"
 
 // Modified from PSVR2-Camera project. Credits: Supremium
 
@@ -120,7 +121,8 @@ bool copy_latest_frame_data(
     void* rightCameraData,
     size_t cameraDataSize,
     uint32_t &timestamp,
-    uint64_t &frame_time
+    uint64_t &frame_time,
+    xrt_pose* out_pose
 ) {
     if (WaitForSingleObject(data.hImageEvent, INFINITE) != WAIT_OBJECT_0) return false;
     if (WaitForSingleObject(data.hImageMutex, INFINITE) != WAIT_OBJECT_0) return false;
@@ -177,52 +179,70 @@ bool copy_latest_frame_data(
     memcpy(leftCameraData, data_ptr, cameraDataSize);
     memcpy(rightCameraData, data_ptr + cameraDataSize, cameraDataSize);
 
-    // const size_t pose_offset = POSE_DATA_OFFSET + (POST_DATA_INDEX_OFFSET * latestIndex);
-    // const auto pose_data_ptr = reinterpret_cast<const float*>(
-    //     reinterpret_cast<const char*>(data.imageMemBase) + pose_offset
-    // );
-    //
-    // float pose_floats[64];
-    // std::memcpy(pose_floats, pose_data_ptr, sizeof(pose_floats));
-    //
-    // const xrt_vec3 p_base = {
-    //     .x = pose_floats[3],
-    //     .y = pose_floats[4],
-    //     .z = pose_floats[5],
-    // };
-    //
-    // const xrt_vec3 p_offset_vec = {
-    //     .x = pose_floats[10],
-    //     .y = pose_floats[11],
-    //     .z = pose_floats[12],
-    // };
-    //
-    // const xrt_quat r_q = {
-    //     .x = pose_floats[6],
-    //     .y = pose_floats[7],
-    //     .z = pose_floats[8],
-    //     .w = pose_floats[9],
-    // };
-    //
-    // const xrt_quat o_q = {
-    //     .x = pose_floats[13],
-    //     .y = pose_floats[14],
-    //     .z = pose_floats[15],
-    //     .w = pose_floats[16],
-    // };
-    //
-    // xrt_quat final_rotation;
-    // xrt_vec3 p_rotated_offset;
-    // xrt_vec3 final_position = p_base;
-    //
-    // math_quat_rotate(&r_q, &o_q, &final_rotation);
-    // math_quat_rotate_vec3(&final_rotation, &p_offset_vec, &p_rotated_offset);
-    // math_vec3_accum(&p_rotated_offset, &final_position);
-    //
-    // final_position.z *= -1.0f;
-    //
-    // out_pose->position = final_position;
-    // out_pose->orientation = final_rotation;
+    const size_t pose_offset = POSE_DATA_OFFSET + (POST_DATA_INDEX_OFFSET * latestIndex);
+    const auto pose_data_ptr = reinterpret_cast<const float*>(
+        reinterpret_cast<const char*>(data.imageMemBase) + pose_offset
+    );
+    
+    float pose_floats[64];
+    std::memcpy(pose_floats, pose_data_ptr, sizeof(pose_floats));
+    
+    const xrt_vec3 p_base = {
+        .x = pose_floats[3],
+        .y = pose_floats[4],
+        .z = pose_floats[5],
+    };
+    
+    const xrt_vec3 p_offset_vec = {
+        .x = pose_floats[10],
+        .y = pose_floats[11],
+        .z = pose_floats[12],
+    };
+    
+    const xrt_quat r_q = {
+        .x = pose_floats[6],
+        .y = pose_floats[7],
+        .z = pose_floats[8],
+        .w = pose_floats[9],
+    };
+    
+    const xrt_quat o_q = {
+        .x = pose_floats[13],
+        .y = pose_floats[14],
+        .z = pose_floats[15],
+        .w = pose_floats[16],
+    };
+    
+    xrt_quat final_rotation = r_q;
+    xrt_vec3 p_rotated_offset;
+    xrt_vec3 final_position = p_base;
+    
+    math_quat_rotate_vec3(&final_rotation, &p_offset_vec, &p_rotated_offset);
+    math_vec3_accum(&p_rotated_offset, &final_position);
+    
+    math_quat_rotate(&final_rotation, &o_q, &final_rotation);
+
+    // Add a 180 degree rotation on X (local to final_rotation) onto final_rotation
+    xrt_quat x_180_rot = {1, 0, 0, 0};
+    math_quat_rotate(&final_rotation, &x_180_rot, &final_rotation);
+
+    // Rotate -15 degrees on X
+    xrt_quat x_15_rot;
+    xrt_vec3 x_15_rot_vec{DEG_TO_RAD(-15.0f), 0.0f, 0.0f };
+    math_quat_from_euler_angles(&x_15_rot_vec, &x_15_rot);
+    math_quat_rotate(&final_rotation, &x_15_rot, &final_rotation);
+
+    // Rotate -15 degrees on Y
+    xrt_quat y_15_rot;
+    xrt_vec3 y_15_rot_vec{0.0f, DEG_TO_RAD(15.0f), 0.0f };
+    math_quat_from_euler_angles(&y_15_rot_vec, &y_15_rot);
+    math_quat_rotate(&final_rotation, &y_15_rot, &final_rotation);
+
+    // Normalize
+    math_quat_ensure_normalized(&final_rotation);
+    
+    out_pose->position = final_position;
+    out_pose->orientation = final_rotation;
 
     if (!ReleaseMutex(data.hImageMutex)) return false;
 

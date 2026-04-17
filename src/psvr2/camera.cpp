@@ -128,8 +128,8 @@ bool get_cam_calib(t_stereo_camera_calibration **calibRef, xrt_pose *head_in_lef
             return false;
         }
 
-        camCalib.image_size_pixels.w = 1024;
-        camCalib.image_size_pixels.h = 1024;
+        camCalib.image_size_pixels.w = 1016;
+        camCalib.image_size_pixels.h = 1016;
         camCalib.intrinsics[0][0] = camIntrinsics.fx;
         camCalib.intrinsics[0][1] = 0.0f;
         camCalib.intrinsics[0][2] = camIntrinsics.cx;
@@ -145,9 +145,9 @@ bool get_cam_calib(t_stereo_camera_calibration **calibRef, xrt_pose *head_in_lef
 
         // The min/max normalized coordinates that map to the image edges (0 to W-1/H-1).
         const double X_MIN = (0.0 - camIntrinsics.cx) / camIntrinsics.fx;
-        const double X_MAX = (1024 - 1.0 - camIntrinsics.cx) / camIntrinsics.fx;
+        const double X_MAX = (1016 - 1.0 - camIntrinsics.cx) / camIntrinsics.fx;
         const double Y_MIN = (0.0 - camIntrinsics.cy) / camIntrinsics.fy;
-        const double Y_MAX = (1024 - 1.0 - camIntrinsics.cy) / camIntrinsics.fy;
+        const double Y_MAX = (1016 - 1.0 - camIntrinsics.cy) / camIntrinsics.fy;
 
         const double X_RANGE = X_MAX - X_MIN;
         const double Y_RANGE = Y_MAX - Y_MIN;
@@ -219,7 +219,7 @@ bool get_cam_calib(t_stereo_camera_calibration **calibRef, xrt_pose *head_in_lef
     // Also a difference between left and right eye?
     // double translation[] = {-0.0767532932298818, 0.00043681802400829, -0.020487561118237737};
 
-    xrt_quat camera_rot_quat = {0.001050473, -0.2616819, -0.003874446, 0.965146};
+    xrt_quat camera_rot_quat = {-0.0001221, -0.2617057, -0.0038890, 0.9651399};
     xrt_matrix_3x3 camera_rot_matrix = {};
     math_matrix_3x3_from_quat(&camera_rot_quat, &camera_rot_matrix);
     double rotation[] = {
@@ -233,7 +233,7 @@ bool get_cam_calib(t_stereo_camera_calibration **calibRef, xrt_pose *head_in_lef
         camera_rot_matrix.v[7],
         camera_rot_matrix.v[8]
     };
-    double translation[] = {-0.0761642, -0.0006115109, 0.02089401};
+    double translation[] = {-0.0762076, 0.0000654, -0.0207520};
     memcpy(calib->camera_rotation, rotation, sizeof(rotation));
     memcpy(calib->camera_translation, translation, sizeof(translation));
 
@@ -247,10 +247,15 @@ bool get_cam_calib(t_stereo_camera_calibration **calibRef, xrt_pose *head_in_lef
     // -x -> Left from the HMD
     // xrt_pose headRef {0,0,0,0, -0.15,-0.5, -0.15};
 
+    // xrt_pose headRef {
+    //     -0.1294095, 0.1294096, -0.01703709, 0.9829631,
+    //     -0.055, 0.02589577, -0.02127628 // Pos y is still not low enough, this might be an issue with IPC
+    // };
+
     xrt_pose headRef {
-        -0.1294095, 0.1294096, -0.01703709, 0.9829631,
-        -0.055, 0.02589577, -0.02127628 // Pos y is still not low enough, this might be an issue with IPC
-    };
+        { 0, 0, 0, 0 },
+        { 0, 0, 0 }
+     };
 
     math_pose_invert(&headRef, head_in_left);
 
@@ -304,7 +309,7 @@ void create_frame(const uint8_t *raw_bc4, xrt_frame *&frame) {
         frame->data[i2] = lut[frame->data[i2]];
 }
 
-bool get_camera_frames(SharedMemoryData &shared_memory_data, xrt_frame* frames[], uint32_t &latest_timestamp, uint64_t &frame_time) {
+bool get_camera_frames(SharedMemoryData &shared_memory_data, xrt_frame* frames[], uint32_t &latest_timestamp, uint64_t &frame_time, xrt_pose* out_pose) {
     static std::vector<uint8_t> bc4_left(BC4_DATA_SIZE);
     static std::vector<uint8_t> bc4_right(BC4_DATA_SIZE);
 
@@ -315,7 +320,8 @@ bool get_camera_frames(SharedMemoryData &shared_memory_data, xrt_frame* frames[]
         bc4_right.data(),
         BC4_DATA_SIZE,
         latest_timestamp,
-        frame_time
+        frame_time,
+        out_pose
     );
 
     if (!success) {
