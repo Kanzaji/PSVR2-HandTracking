@@ -282,25 +282,25 @@ void create_frame(const uint8_t *raw_bc4, xrt_frame *&frame) {
 
     if (frame->size != L8_UNCOMPRESSED_SIZE) {
         xrt_frame_reference(&frame, nullptr);
-        throw std::runtime_error(std::format("Size mismatch: Allocated %zu bytes, expected %zu bytes.", frame->size, BC4_PADDED_SIZE));
+        throw std::runtime_error(std::format("Size mismatch: Allocated %zu bytes, expected %zu bytes.", frame->size, L8_UNCOMPRESSED_SIZE));
     }
 
     frame->stereo_format = XRT_STEREO_FORMAT_NONE;
-    frame->stride = 1024;
+    frame->stride = REQUIRED_WIDTH;
 
-    for (uint32_t block_y = 0; block_y < IMAGE_HEIGHT/4; block_y++) {
-        for (uint32_t block_x = 0; block_x < IMAGE_WIDTH/4; block_x++) {
-            const size_t bc4_offset = (block_y * (REQUIRED_WIDTH/4) + block_x) * BCDEC_BC4_BLOCK_SIZE;
+    for (uint32_t block_y = 0; block_y < REQUIRED_HEIGHT/4; block_y++) {
+        for (uint32_t block_x = 0; block_x < REQUIRED_WIDTH/4; block_x++) {
+            const size_t bc4_offset = (block_y * (IMAGE_WIDTH/4) + block_x) * BCDEC_BC4_BLOCK_SIZE;
 
             // Calculate output destination offset (1 byte per pixel)
             // The top-left pixel of the current 4x4 block:
             // Y position: block_y * 4 rows
             // X position: block_x * 4 columns
-            const size_t l8_offset = (block_y * 4 * 1024) + (block_x * 4);
+            const size_t l8_offset = (block_y * 4 * REQUIRED_WIDTH) + (block_x * 4);
 
             bcdec_bc4(raw_bc4 + bc4_offset,
                       frame->data + l8_offset,
-                      1024);
+                      REQUIRED_WIDTH);
         }
     }
 
