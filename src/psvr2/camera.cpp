@@ -268,6 +268,43 @@ bool get_cam_calib(t_stereo_camera_calibration **calibRef, xrt_pose *head_in_lef
     return true;
 }
 
+inline void bc4_decode(const uint8_t* src, uint8_t* dst, int dst_pitch) {
+    const uint8_t ref0 = src[0];
+    const uint8_t ref1 = src[1];
+
+    uint8_t colors[8];
+    colors[0] = ref0;
+    colors[1] = ref1;
+
+    // Strictly unsigned interpolation to prevent signed char underflow
+    if (ref0 > ref1) {
+        colors[2] = (6 * ref0 + 1 * ref1) / 7;
+        colors[3] = (5 * ref0 + 2 * ref1) / 7;
+        colors[4] = (4 * ref0 + 3 * ref1) / 7;
+        colors[5] = (3 * ref0 + 4 * ref1) / 7;
+        colors[6] = (2 * ref0 + 5 * ref1) / 7;
+        colors[7] = (1 * ref0 + 6 * ref1) / 7;
+    } else {
+        colors[2] = (4 * ref0 + 1 * ref1) / 5;
+        colors[3] = (3 * ref0 + 2 * ref1) / 5;
+        colors[4] = (2 * ref0 + 3 * ref1) / 5;
+        colors[5] = (1 * ref0 + 4 * ref1) / 5;
+        colors[6] = 0;
+        colors[7] = 255;
+    }
+
+    uint64_t indices = 0;
+    std::memcpy(&indices, src + 2, 6);
+
+    for (int y = 0; y < 4; ++y) {
+        for (int x = 0; x < 4; ++x) {
+            const int idx = indices & 0x07;
+            dst[y * dst_pitch + x] = colors[idx];
+            indices >>= 3;
+        }
+    }
+}
+
 void create_frame(const uint8_t *raw_bc4, xrt_frame *&frame) {
     u_frame_create_one_off(
         XRT_FORMAT_L8,
@@ -298,15 +335,19 @@ void create_frame(const uint8_t *raw_bc4, xrt_frame *&frame) {
             // X position: block_x * 4 columns
             const size_t l8_offset = (block_y * 4 * REQUIRED_WIDTH) + (block_x * 4);
 
-            bcdec_bc4(raw_bc4 + bc4_offset,
-                      frame->data + l8_offset,
-                      REQUIRED_WIDTH);
+            bc4_decode(raw_bc4 + bc4_offset,
+                        frame->data + l8_offset,
+                        REQUIRED_WIDTH);
+
+            // bcdec_bc4(raw_bc4 + bc4_offset,
+                      // frame->data + l8_offset,
+                      // REQUIRED_WIDTH);
         }
     }
 
     // Apply Gamma Correction.
-    for (size_t i2 = 0; i2 < L8_UNCOMPRESSED_SIZE; i2++)
-        frame->data[i2] = lut[frame->data[i2]];
+    // for (size_t i2 = 0; i2 < L8_UNCOMPRESSED_SIZE; i2++)
+        // frame->data[i2] = lut[frame->data[i2]];
 }
 
 bool get_camera_frames(SharedMemoryData &shared_memory_data, xrt_frame* frames[], uint32_t &latest_timestamp, uint64_t &frame_time, xrt_pose* out_pose) {
