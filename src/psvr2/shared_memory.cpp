@@ -36,7 +36,7 @@ void setup_shared_memory(SharedMemoryData& data) {
 
         data.imageMemBase = static_cast<char*>(data.pBuf);
 
-        data.hImageEvent = OpenEventA(SYNCHRONIZE, FALSE, EVENT_NAME);
+        data.hImageEvent = OpenEventA(SYNCHRONIZE | EVENT_ALL_ACCESS, FALSE, EVENT_NAME);
         data.hImageMutex = OpenMutexA(SYNCHRONIZE, FALSE, MUTEX_NAME);
 
         if (!data.hImageEvent || !data.hImageMutex) {
@@ -126,6 +126,8 @@ bool copy_latest_frame_data(
 ) {
     if (WaitForSingleObject(data.hImageEvent, INFINITE) != WAIT_OBJECT_0) return false;
     if (WaitForSingleObject(data.hImageMutex, INFINITE) != WAIT_OBJECT_0) return false;
+
+    ResetEvent(data.hImageEvent);
 
     uint32_t latestTimestamp = 0;
     uint32_t latestIndex = 0;
